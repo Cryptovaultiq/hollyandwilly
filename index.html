@@ -9,9 +9,11 @@
         <!-- (Do NOT add manual <script> tags for WalletConnect or main.* in index.html) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Ethers.js v6 - for EVM chains (MetaMask, SafePal, OKX, etc.) -->
-<script src="https://cdn.ethers.io/lib/ethers-6.13.2.umd.min.js"></script>
+   <!-- Better ethers.js v6 CDN - use this instead of old one -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.2/ethers.umd.min.js"></script>
 
+<!-- Fallback mirror if above fails -->
+<!-- <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script> -->
 <!-- Solana web3.js - for Phantom, Backpack, etc. -->
 <script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
 
@@ -2081,6 +2083,7 @@
     <script src="script.js"></script>
 </body>
 </html>
+
 
 
 
