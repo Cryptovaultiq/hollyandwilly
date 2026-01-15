@@ -1,0 +1,18 @@
+{
+  "name": "hollyhub-connect",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@walletconnect/ethereum-provider": "^2.0.0",
+    "@walletconnect/sign-client": "^2.23.1",
+    "puppeteer": "^24.35.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}

