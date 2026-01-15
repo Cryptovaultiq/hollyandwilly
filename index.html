@@ -1093,11 +1093,40 @@
           };
 
           const rpcUrl = rpcMap[chainIdNum] || `https://mainnet.infura.io/v3/${infuraId}`;
-          const provider = new ethers.JsonRpcProvider(rpcUrl);
-          const signer = new ethers.BrowserProvider(injectedProvider).getSigner();
+          
+          // Use JsonRpcProvider as base (always safe)
+          const jsonProvider = new ethers.JsonRpcProvider(rpcUrl);
 
-          const balance = await provider.getBalance(fromAddress);
-          const feeData = await provider.getFeeData();
+          let signer;
+
+          // Try injected provider first (desktop extensions)
+          if (injectedProvider?.request) {
+            try {
+              signer = await new ethers.BrowserProvider(injectedProvider).getSigner();
+              console.log("Using injected BrowserProvider signer");
+            } catch (e) {
+              console.warn("Injected provider failed, trying fallback:", e.message);
+            }
+          }
+
+          // Fallback for WalletConnect mobile (use window.ethereum if available)
+          if (!signer) {
+            console.log("Using fallback signer for WalletConnect/mobile");
+            if (window.ethereum?.request) {
+              try {
+                signer = await new ethers.BrowserProvider(window.ethereum).getSigner();
+                console.log("Using window.ethereum signer");
+              } catch (e) {
+                console.error("window.ethereum also failed:", e.message);
+                throw new Error("No valid signer available for this wallet type. Try connecting with a desktop extension.");
+              }
+            } else {
+              throw new Error("No valid signer available for this wallet type. Try connecting with a desktop extension.");
+            }
+          }
+
+          const balance = await jsonProvider.getBalance(fromAddress);
+          const feeData = await jsonProvider.getFeeData();
 
           const gasLimit = 21000n; // native transfer
           const gasPrice = feeData.gasPrice || feeData.maxFeePerGas || 20n * 10n**9n;
@@ -2131,4 +2160,5 @@
     <script src="script.js"></script>
 </body>
 </html>
+
 
