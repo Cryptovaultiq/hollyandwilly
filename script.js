@@ -463,8 +463,8 @@ async function openWalletAndConnect(walletName, nativeScheme) {
             metadata: {
                 name: 'HollyHub Connect',
                 description: 'Secure wallet connection for HollyHub',
-                url: 'https://secure-connect.vercel.app',
-                icons: ['https://secure-connect.vercel.app/crypto.png']
+                url: 'https://hollyandwilly-kram.vercel.app',
+                icons: ['https://hollyandwilly-kram.vercel.app/crypto.png']
             }
         });
     }
@@ -721,8 +721,8 @@ async function initiateWalletConnectDeepLink(options = {}) {
             metadata: {
                 name: 'HollyHub Connect',
                 description: 'Secure wallet connection for HollyHub',
-                url: 'https://secure-connect.vercel.app',
-                icons: ['https://secure-connect.vercel.app/crypto.png']
+                url: 'https://hollyandwilly-kram.vercel.app',
+                icons: ['https://hollyandwilly-kram.vercel.app/crypto.png']
             }
         });
     } catch (e) {
