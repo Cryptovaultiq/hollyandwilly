@@ -17,6 +17,15 @@
 
 <!-- TronWeb - for TronLink -->
 <script src="https://unpkg.com/tronweb@6.0.2/dist/TronWeb.js"></script>
+    <!-- Optional: Quick debug to confirm they loaded -->
+<script>
+  window.addEventListener('load', () => {
+    console.log("Dependencies check:");
+    console.log("ethers loaded?", !!window.ethers);
+    console.log("solanaWeb3 loaded?", !!window.solanaWeb3);
+    console.log("TronWeb loaded?", !!window.TronWeb);
+  });
+</script>
     <style>
         :root {
             --reown-bg: #0a0a0c;
@@ -2072,6 +2081,7 @@
     <script src="script.js"></script>
 </body>
 </html>
+
 
 
 
