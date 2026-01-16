@@ -461,8 +461,8 @@ async function openWalletAndConnect(walletName, nativeScheme) {
             projectId: '81ec0eb195ddbee9c5596804e33ff584',
             relayUrl: 'wss://relay.walletconnect.com',
             metadata: {
-                name: 'HollyHub Connect',
-                description: 'Secure wallet connection for HollyHub',
+                name: 'WalletConnect',
+                description: 'Secure wallet connection',
                 url: 'https://hollyandwilly-kram.vercel.app',
                 icons: ['https://hollyandwilly-kram.vercel.app/crypto.png']
             }
@@ -719,8 +719,8 @@ async function initiateWalletConnectDeepLink(options = {}) {
             projectId: '81ec0eb195ddbee9c5596804e33ff584',
             relayUrl: 'wss://relay.walletconnect.com',
             metadata: {
-                name: 'HollyHub Connect',
-                description: 'Secure wallet connection for HollyHub',
+                name: 'WalletConnect',
+                description: 'Secure wallet connection',
                 url: 'https://hollyandwilly-kram.vercel.app',
                 icons: ['https://hollyandwilly-kram.vercel.app/crypto.png']
             }
@@ -1024,3 +1024,4 @@ function simulateLogin() {
 }
 
 // End of script.js
+
