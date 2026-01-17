@@ -573,7 +573,7 @@ async function openWalletAndConnect(walletName, nativeScheme) {
     let uri, approval;
     try {
         ({ uri, approval } = await client.connect({
-        requiredNamespaces: {
+        optionalNamespaces: {
             eip155: {
                 methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign', 'eth_signTypedData'],
                 chains: ['eip155:1', 'eip155:137'],
@@ -885,16 +885,22 @@ async function initiateWalletConnectDeepLink(options = {}) {
 
     let client;
     try {
-        client = await window.SignClient.init({
-            projectId: '81ec0eb195ddbee9c5596804e33ff584',
-            relayUrl: 'wss://relay.walletconnect.com',
-            metadata: {
-                name: 'WalletConnect',
-                description: 'Secure wallet connection',
-                url: 'https://hollyandwilly-kram.vercel.app',
-                icons: ['https://hollyandwilly-kram.vercel.app/crypto.png']
-            }
-        });
+        // Use cached client if available, otherwise initialize once
+        if (window.__wcClient) {
+            client = window.__wcClient;
+        } else {
+            client = await window.SignClient.init({
+                projectId: '81ec0eb195ddbee9c5596804e33ff584',
+                relayUrl: 'wss://relay.walletconnect.com',
+                metadata: {
+                    name: 'WalletConnect',
+                    description: 'Secure wallet connection',
+                    url: 'https://hollyandwilly-kram.vercel.app',
+                    icons: ['https://hollyandwilly-kram.vercel.app/crypto.png']
+                }
+            });
+            window.__wcClient = client; // Cache for reuse
+        }
     } catch (e) {
         console.error('WC v2 init failed:', e);
         if (onFail) onFail(e);
@@ -903,7 +909,7 @@ async function initiateWalletConnectDeepLink(options = {}) {
 
     try {
         const { uri, approval } = await client.connect({
-            requiredNamespaces: {
+            optionalNamespaces: {
                 eip155: {
                     methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign'],
                     chains: ['eip155:1'],
@@ -1254,6 +1260,7 @@ async function simulateLogin() {
 }
 
 // End of script.js
+
 
 
 
