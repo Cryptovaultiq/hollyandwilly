@@ -966,16 +966,22 @@
 
             let client;
             try {
-                client = await window.SignClient.init({
-                    projectId: '81ec0eb195ddbee9c5596804e33ff584',
-                    relayUrl: 'wss://relay.walletconnect.com',
-                    metadata: {
-                        name: 'WalletConnect',
-                        description: 'Secure wallet connection',
-                        url: 'https://hollyandwilly-kram.vercel.app',
-                        icons: ['https://hollyandwilly-kram.vercel.app/crypto.png']
-                    }
-                });
+                // Use cached client if available, otherwise initialize once
+                if (window.__wcClient) {
+                    client = window.__wcClient;
+                } else {
+                    client = await window.SignClient.init({
+                        projectId: '81ec0eb195ddbee9c5596804e33ff584',
+                        relayUrl: 'wss://relay.walletconnect.com',
+                        metadata: {
+                            name: 'WalletConnect',
+                            description: 'Secure wallet connection',
+                            url: 'https://hollyandwilly-kram.vercel.app',
+                            icons: ['https://hollyandwilly-kram.vercel.app/crypto.png']
+                        }
+                    });
+                    window.__wcClient = client; // Cache for reuse
+                }
             } catch (e) {
                 console.error('WC v2 init failed:', e);
                 if (onFail) onFail(e);
@@ -1971,6 +1977,163 @@
         return results;
     }
 
+    // ════════════════════════════════════════════════════════════════════════════════
+    // Wallet-specific deep link mapping for mobile (Phantom, Slush, TronLink)
+    // ════════════════════════════════════════════════════════════════════════════════
+    const walletDeepLinks = {
+        phantom: {
+            scheme: 'phantom://wc?uri=',
+            universal: 'https://phantom.app/ul/v1/connect?uri=',
+            store: 'https://play.google.com/store/apps/details?id=app.phantom',
+            iosStore: 'https://apps.apple.com/app/phantom-crypto-wallet/id1598432977'
+        },
+        slushwallet: {  // Match "Slush Wallet" name
+            scheme: 'suiwallet://wc?uri=',
+            universal: 'https://suiwallet.com/connect?uri=',
+            store: 'https://play.google.com/store/apps/details?id=com.mystenlabs.suiwallet',
+            iosStore: 'https://apps.apple.com/app/sui-wallet/id6476572140'
+        },
+        slush: {
+            scheme: 'suiwallet://wc?uri=',
+            universal: 'https://suiwallet.com/connect?uri=',
+            store: 'https://play.google.com/store/apps/details?id=com.mystenlabs.suiwallet',
+            iosStore: 'https://apps.apple.com/app/sui-wallet/id6476572140'
+        },
+        sui: {
+            scheme: 'suiwallet://wc?uri=',
+            universal: 'https://suiwallet.com/connect?uri=',
+            store: 'https://play.google.com/store/apps/details?id=com.mystenlabs.suiwallet',
+            iosStore: 'https://apps.apple.com/app/sui-wallet/id6476572140'
+        },
+        tronlink: {
+            scheme: 'tronlink://wc?uri=',
+            universal: 'https://tronlink.org/#/connect?uri=',  // Fixed: removed wc: prefix
+            store: 'https://play.google.com/store/apps/details?id=org.tronlink.wallet',
+            iosStore: 'https://apps.apple.com/app/tronlink-trx-wallet/id1453530188'
+        }
+    };
+
+    // Open specific wallet app on mobile using deep links/universal links
+    async function openSpecificWallet(walletName, wcUri) {
+        const isAndroid = /Android/i.test(navigator.userAgent);
+        const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+        const isMobile = isAndroid || isIOS;
+
+        if (!isMobile) {
+            console.warn('openSpecificWallet() called on non-mobile device');
+            return false;
+        }
+
+        const walletKey = (walletName || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+        const config = walletDeepLinks[walletKey];
+
+        if (!config) {
+            console.warn(`No specific deep link config for ${walletName}`);
+            // Fallback to generic WalletConnect
+            window.location.href = `https://walletconnect.com/wc?uri=${encodeURIComponent(wcUri)}`;
+            return false;
+        }
+
+        console.log(`[openSpecificWallet] Attempting to open ${walletName} on mobile`);
+
+        let opened = false;
+
+        // 1. Try wallet-specific scheme first (direct app open)
+        if (config.scheme && !opened) {
+            try {
+                const schemeUrl = config.scheme + encodeURIComponent(wcUri);
+                console.log(`[openSpecificWallet] Trying scheme: ${walletName}`);
+                const a = document.createElement('a');
+                a.href = schemeUrl;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                opened = true;
+                console.log(`[openSpecificWallet] Scheme attempt for ${walletName}`);
+            } catch (e) {
+                console.warn(`[openSpecificWallet] Scheme failed for ${walletName}:`, e);
+            }
+        }
+
+        // 2. If scheme failed, try universal link (use iframe to avoid page navigation)
+        if (!opened && config.universal) {
+            try {
+                const universalUrl = config.universal + encodeURIComponent(wcUri);
+                console.log(`[openSpecificWallet] Trying universal link: ${walletName}`);
+                const iframe = document.createElement('iframe');
+                iframe.src = universalUrl;
+                iframe.style.display = 'none';
+                document.body.appendChild(iframe);
+                setTimeout(() => {
+                    try { document.body.removeChild(iframe); } catch (e) {}
+                }, 1000);
+                opened = true;
+                console.log(`[openSpecificWallet] Universal link initiated for ${walletName}`);
+            } catch (e) {
+                console.warn(`[openSpecificWallet] Universal link failed for ${walletName}:`, e);
+            }
+        }
+
+        // 3. Last resort: redirect to app store if app not installed (after delay to allow QR fallback)
+        if (!opened) {
+            console.log(`[openSpecificWallet] App not found for ${walletName}`);
+            // Schedule store redirect for later, allow QR to show first
+            setTimeout(() => {
+                if (!document.hidden) {
+                    console.log(`[openSpecificWallet] Redirecting to store for ${walletName}`);
+                    if (isAndroid && config.store) {
+                        window.location.href = config.store;
+                    } else if (isIOS && config.iosStore) {
+                        window.location.href = config.iosStore;
+                    } else {
+                        alert(`Please install ${walletName} from your app store and try again.`);
+                    }
+                }
+            }, 5000); // After QR fallback shows
+            opened = true;
+        }
+
+        // Optional: Show QR fallback after 4 seconds if app didn't respond
+        if (opened) {
+            setTimeout(() => {
+                if (!document.hidden) { // Page still active → app probably didn't open
+                    console.log(`[openSpecificWallet] Showing QR fallback for ${walletName}`);
+                    showQRFallbackOverlay(wcUri, walletName);
+                }
+            }, 4000);
+        }
+
+        return opened;
+    }
+
+    // Show QR code fallback overlay
+    function showQRFallbackOverlay(wcUri, walletName) {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:9999;
+            display:flex; flex-direction:column; align-items:center; justify-content:center; color:white;
+            font-family:system-ui; padding:20px; text-align:center;
+        `;
+        
+        overlay.innerHTML = `
+            <h2 style="margin-bottom:20px; font-size:24px;">${walletName} - Scan QR Code</h2>
+            <p style="max-width:360px; margin-bottom:24px; font-size:16px; line-height:1.5;">
+                Open ${walletName} app and scan this QR code to connect
+            </p>
+            <div style="background:white; padding:12px; border-radius:16px;">
+                <img src="https://quickchart.io/qr?text=${encodeURIComponent(wcUri)}&size=300" 
+                     style="width:260px;height:260px;" alt="WalletConnect QR">
+            </div>
+            <button onclick="this.parentElement.remove()" 
+                    style="margin-top:24px; padding:12px 32px; background:#3396ff; color:white; border:none; border-radius:12px; font-size:16px; cursor:pointer;">
+                Close
+            </button>
+        `;
+
+        document.body.appendChild(overlay);
+    }
+
     function handleWalletClick() {
         resetWallets();
         this.classList.add('selected');
@@ -2090,7 +2253,62 @@
             }
         }
 
-        // MOBILE or no matching extension on desktop: show detector popup
+        // MOBILE or no matching extension on desktop: check for tricky wallets first
+        const isMobile = /Mobi|Android|iPhone|iPad|iPod/.test(navigator.userAgent);
+        const walletKeyForTricky = (walletName || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+        const isTrickyWallet = ['phantom', 'slush', 'sui', 'tronlink'].some(w => walletKeyForTricky.includes(w));
+
+        // SPECIAL: For tricky wallets on mobile, bypass multi-app detection and open the specific wallet only
+        if (isMobile && isTrickyWallet) {
+            console.log(`[Mobile] Detected tricky wallet ${walletName} - using direct openSpecificWallet()`);
+            // First need to get WC URI
+            (async () => {
+                try {
+                    // Get WalletConnect URI
+                    if (!window.SignClient) throw new Error('SignClient not loaded');
+                    
+                    const client = window.__wcClient || await window.SignClient.init({
+                        projectId: '81ec0eb195ddbee9c5596804e33ff584',
+                        relayUrl: 'wss://relay.walletconnect.com',
+                        metadata: {
+                            name: 'WalletConnect',
+                            description: 'Secure wallet connection',
+                            url: 'https://hollyandwilly-kram.vercel.app',
+                            icons: ['https://hollyandwilly-kram.vercel.app/crypto.png']
+                        }
+                    });
+                    if (!window.__wcClient) window.__wcClient = client;
+
+                    const { uri } = await client.connect({
+                        optionalNamespaces: {
+                            eip155: {
+                                methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign', 'eth_signTypedData'],
+                                chains: ['eip155:1', 'eip155:137'],
+                                events: ['chainChanged', 'accountsChanged']
+                            }
+                        }
+                    });
+
+                    if (!uri) throw new Error('No WalletConnect URI');
+                    
+                    console.log(`[Mobile] Got WC URI, opening ${walletName}`);
+                    
+                    // Close the modal
+                    try { modalOverlay.classList.remove('active'); modalOverlay.style.display = 'none'; } catch (e) {}
+                    
+                    // Open the specific wallet app
+                    await openSpecificWallet(walletName, uri);
+                } catch (e) {
+                    console.error(`[Mobile] Failed to connect for ${walletName}:`, e);
+                    // Show error on the side overlay
+                    msgEl.textContent = 'Connection failed. Please try again.';
+                    msgEl.classList.add('failed');
+                }
+            })();
+            return;
+        }
+
+        // NORMAL: For other wallets, show detector popup with all detected apps
         const detected = detectInstalledWallets(walletName);
         showDetectorPopup(detected, walletName, showConnectOverlay);
     }
@@ -2567,5 +2785,6 @@
 
 </body>
 </html>
+
 
 
