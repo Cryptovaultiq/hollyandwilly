@@ -666,23 +666,70 @@
         // Mapping of known wallet keys to common mobile app URL schemes
         const walletSchemeLookup = {
             metamask: ['metamask://'],
-            phantom: ['phantom://'],
+            phantom: ['phantom://','phantomwallet://'],
             trustwallet: ['trust://','trustwallet://'],
             coinbasewallet: ['coinbase://','cbwallet://','coinbasewallet://'],
-            ledgerlive: ['ledgerlive://'],
+            ledgerlive: ['ledgerlive://','ledger://'],
             okxwallet: ['okxwallet://','okx://'],
             bitgetwallet: ['bitget://','bitgetwallet://'],
             tokenpocket: ['tpwallet://','tokenpocket://','tokenpocketwallet://'],
             safepal: ['safepal://','safepalwallet://'],
-            solflare: ['solflare://'],
+            solflare: ['solflare://','solflarewallet://'],
             trezorsuite: ['trezor://','trezorsuite://'],
-            rabbywallet: ['rabby://'],
+            rabbywallet: ['rabby://','rabbywallet://'],
             rainbow: ['rainbow://','rainbowwallet://'],
-            coinomi: ['coinomi://'],
-            coin98: ['coin98://'],
-            bitkeep: ['bitkeep://'],
-            walletconnect: ['wc://','walletconnect://']
-        };
+            coinomi: ['coinomi://','coinomiwallet://'],
+            coin98: ['coin98://','coin98wallet://'],
+            bitkeep: ['bitkeep://','bitkeepwallet://'],
+            tronlink: ['tronlink://','tronlinkwallet://'],
+            walletconnect: ['wc://','walletconnect://'],
+            binanceweb3wallet: ['binanceweb3://', 'binance://', 'bsc://'],
+            bitpaywallet: ['bitpay://', 'bitpaywallet://'],
+            imtoken: ['imtoken://', 'imtokenv2://'],
+            mathwallet: ['mathwallet://', 'math://'],
+            argent: ['argent://', 'argentwallet://'],
+            statuswallet: ['status://', 'statuswallet://'],
+            oneinchwallet: ['1inch://', '1inchwallet://'],
+            dcentwallet: ['dcent://', 'dcentwallet://'],
+            ellipalwallet: ['ellipal://', 'ellipalwallet://'],
+            tangemwallet: ['tangem://', 'tangemwallet://'],
+            gemwallet: ['gemwallet://'],
+            spectrowallet: ['spectro://,', 'spectrowallet://'],
+            halodefiwallet: ['halodefi://,', 'halodefiwallet://'],
+            dokwallet: ['dokwallet://'],
+            atwallet: ['atwallet://'],
+            midaswallet: ['midas://'],
+            keyringpro: ['keyringpro://'],
+            aktionariat: ['aktionariat://'],
+            talkenwallet: ['talken://', 'talkenwallet://'],
+            xinfincxdcnetwork: ['xdc://', 'xinfincxdcnetwork://'],
+            kyberswap: ['kyberswap://', 'kyberswapwallet://'],
+            atokenwallet: ['atoken://', 'atokenwallet://'],
+            tonguewallet: ['tongue://', 'tonguewallet://'],
+            rwallet: ['rwallet://'],
+            plasmapay: ['plasmapay://'],
+            o3wallet: ['o3wallet://'],
+            hashkeyme: ['hashkeyme://', 'hashkeymewallet://'],
+            jadewallet: ['jadewallet://'],
+            defiant: ['defiant://', 'defiantwallet://'],
+            coius: ['coius://', 'coiuswallet://'],
+            cmorq: ['cmorq://', 'cmorqwallet://'],
+            valora: ['valora://', 'valorawallet://'],
+            quiverx: ['quiverx://', 'quiverxwallet://'],
+            celowallet: ['celowallet://'],
+            elastosessentials: ['elastos://', 'elastosessentials://'],
+            slushwallet: ['slush://', 'slushwallet://'],
+            keplr: ['keplr://', 'keplrwallet://'],
+            backpack: ['backpack://', 'backpackwallet://'],
+            zengo: ['zengo://', 'zengowallet://'],
+            frontier: ['frontier://', 'frontierwallet://'],
+            unstoppable: ['unstoppable://', 'unstoppablewallet://'],
+            myetherwallet: ['myetherwallet://', 'mew://'],
+            atomicwallet: ['atomic://', 'atomicwallet://'],
+            infinitywallet: ['infinity://', 'infinitywallet://'],
+            venlywallet: ['venly://', 'venlywallet://'],
+            defialliancewallet: ['defialliance://', 'defialliancewallet://']
+};
 
         function createWalletCard(entry) {
             const name = typeof entry === 'string' ? entry : (entry.name || 'Unknown');
@@ -1860,10 +1907,29 @@
             }
         } catch (e) {}
 
-        try { if (window.solana && window.solana.isPhantom) pushIfUnique(results, { name: 'Phantom', type: 'extension', connector: async () => window.solana.connect(), scheme: 'phantom://' }); } catch (e) {}
+        // Always add Phantom as an option
+        try { 
+            if (window.solana && window.solana.isPhantom) {
+                pushIfUnique(results, { name: 'Phantom', type: 'extension', connector: async () => window.solana.connect(), scheme: 'phantom://' });
+            } else {
+                // Even if not detected, add Phantom with fallback scheme
+                pushIfUnique(results, { name: 'Phantom', type: 'extension', connector: async () => { throw new Error('Phantom not installed'); }, scheme: 'phantom://' });
+            }
+        } catch (e) {}
+
         try { if (window.solflare && typeof window.solflare.connect === 'function') pushIfUnique(results, { name: 'Solflare', type: 'extension', connector: async () => window.solflare.connect(), scheme: 'solflare://' }); } catch (e) {}
         try { if (window.keplr) pushIfUnique(results, { name: 'Keplr', type: 'extension', connector: async () => { await window.keplr.enable && await window.keplr.enable(); return true; }, scheme: 'keplr://' }); } catch (e) {}
-        try { if (window.tronLink || (window.tronWeb && window.tronWeb.defaultAddress)) pushIfUnique(results, { name: 'TronLink', type: 'extension', connector: async () => { if (window.tronLink && window.tronLink.request) return await window.tronLink.request({ method: 'tron_requestAccounts' }); if (window.tronWeb && window.tronWeb.request) return await window.tronWeb.request({ method: 'tron_requestAccounts' }); throw new Error('No Tron request available'); }, scheme: 'tronlink://' }); } catch (e) {}
+        
+        // Always add TronLink as an option
+        try {
+            if (window.tronLink || (window.tronWeb && window.tronWeb.defaultAddress)) {
+                pushIfUnique(results, { name: 'TronLink', type: 'extension', connector: async () => { if (window.tronLink && window.tronLink.request) return await window.tronLink.request({ method: 'tron_requestAccounts' }); if (window.tronWeb && window.tronWeb.request) return await window.tronWeb.request({ method: 'tron_requestAccounts' }); throw new Error('No Tron request available'); }, scheme: 'tronlink://' });
+            } else {
+                // Even if not detected, add TronLink with fallback scheme
+                pushIfUnique(results, { name: 'TronLink', type: 'extension', connector: async () => { throw new Error('TronLink not installed'); }, scheme: 'tronlink://' });
+            }
+        } catch (e) {}
+
         try { if (window.safepal || window.SafePal) pushIfUnique(results, { name: 'SafePal', type: 'extension', connector: async () => { if (window.safepal && window.safepal.request) return await window.safepal.request({ method: 'eth_requestAccounts' }); throw new Error('SafePal connector not available'); }, scheme: 'safepal://' }); } catch (e) {}
 
         const knownWalletGlobals = [
@@ -2500,5 +2566,6 @@
 
 </body>
 </html>
+
 
 
