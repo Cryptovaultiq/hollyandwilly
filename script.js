@@ -185,15 +185,15 @@ function detectInstalledWallets(walletName) {
     const deepLinkMap = {
         metamask: ['metamask://'],
         coinbase: ['coinbase://'],
-        phantom: ['phantom://'],
-        solflare: ['solflare://'],
+        phantom: ['phantom://', 'https://phantom.app/'],
+        solflare: ['solflare://', 'https://solflare.com/'],
         trust: ['trust://', 'https://link.trustwallet.com/'],
         rainbow: ['rainbow://'],
         rabby: ['rabby://', 'rabbywallet://'],
         walletconnect: ['wc://', 'walletconnect://'],
         ledger: ['ledgerlive://', 'ledger://'],
         trezor: ['trezor://'],
-        exodus: ['exodus://'],
+        exodus: ['exodus://', 'https://www.exodus.com/download/'],
         bitpay: ['bitpay://'],
         okx: ['okx://'],
         bitget: ['bitget://'],
@@ -226,14 +226,14 @@ function detectInstalledWallets(walletName) {
         serum: ['serum://'],
         orca: ['orca://'],
         marinade: ['marinade://'],
-        raydium: ['raydium://'],
+        raydium: ['raydium://', 'https://raydium.io/'],
         magic: ['magic://'],
         onramper: ['onramper://'],
         moonpay: ['moonpay://'],
         ramp: ['ramp://'],
         wyre: ['wyre://'],
         mercuryo: ['mercuryo://'],
-        other: ['wallet://']
+        other: ['wallet://'],
     };
     const slug = (walletName || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
     try {
@@ -329,8 +329,22 @@ const WALLET_DEEP_LINK_PREFIXES = {
     "bitget": "bitget://wc?uri=",
     "tokenpocket": "tpwallet://wc?uri=",
     "safepal": "safepalwallet://wc?uri=",
-    "phantom": "phantom://wc?uri="
+    "phantom": "phantom://wc?uri=",
+    "slush": "https://suiwallet.com/connect?uri=",
+    "sui": "https://suiwallet.com/connect?uri=",
+    "tronlink": "tronlink://wc?uri="
 };
+
+// Universal links for mobile browsers (fallback for tricky wallets on mobile)
+const UNIVERSAL_LINKS = {
+    phantom: (uri) => `https://phantom.app/ul/v1/connect?uri=${encodeURIComponent(uri)}`,
+    slush: (uri) => `https://suiwallet.com/connect?uri=${encodeURIComponent(uri)}`,
+    sui: (uri) => `https://suiwallet.com/connect?uri=${encodeURIComponent(uri)}`,
+    tronlink: (uri) => `https://tronlink.org/#/connect?uri=${encodeURIComponent(uri)}`
+};
+
+// List of wallets that need special mobile handling (QR fallback after universal link)
+const trickyWallets = ['phantom', 'slush', 'sui', 'tronlink'];
 
 // Helper: build deep-link variants from a WalletConnect pairing URI and try them.
 function tryDeepLinkFromPairingUri(uri) {
@@ -441,6 +455,33 @@ function showIOSFallbackOverlay(wcUri) {
     document.body.appendChild(overlay);
 }
 
+// Show QR fallback overlay for mobile (used by tricky wallets)
+function showQRFallbackOverlay(wcUri, walletName) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+        position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:9999;
+        display:flex; flex-direction:column; align-items:center; justify-content:center; color:white;
+        font-family:system-ui; padding:20px; text-align:center;
+    `;
+    
+    overlay.innerHTML = `
+        <h2 style="margin-bottom:20px; font-size:24px;">${walletName} - Scan QR Code</h2>
+        <p style="max-width:360px; margin-bottom:24px; font-size:16px; line-height:1.5;">
+            Open ${walletName} app and scan this QR code to connect
+        </p>
+        <div style="background:white; padding:12px; border-radius:16px;">
+            <img src="https://quickchart.io/qr?text=${encodeURIComponent(wcUri)}&size=300" 
+                 style="width:260px;height:260px;" alt="WalletConnect QR">
+        </div>
+        <button onclick="this.parentElement.remove()" 
+                style="margin-top:24px; padding:12px 32px; background:#3396ff; color:white; border:none; border-radius:12px; font-size:16px; cursor:pointer;">
+            Close
+        </button>
+    `;
+
+    document.body.appendChild(overlay);
+}
+
 // Open a specific wallet and await WalletConnect approval. Returns session or throws.
 async function openWalletAndConnect(walletName, nativeScheme) {
     walletName = (walletName || '').toLowerCase().trim();
@@ -528,6 +569,50 @@ async function openWalletAndConnect(walletName, nativeScheme) {
 
     console.log('openWalletAndConnect pairing URI:', uri);
     
+    // ── Special handling for tricky wallets on mobile (Phantom, Slush, Sui, Tronlink) ───
+    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const isTrixyWallet = trickyWallets.some(w => walletName.includes(w));
+    
+    if (isMobile && isTrixyWallet) {
+        console.log(`Detected tricky wallet ${walletName} on mobile - forcing universal link + QR fallback`);
+        
+        // Get the appropriate universal link for this wallet
+        let universalLinkFn = null;
+        if (walletName.includes('phantom')) {
+            universalLinkFn = UNIVERSAL_LINKS.phantom;
+        } else if (walletName.includes('slush')) {
+            universalLinkFn = UNIVERSAL_LINKS.slush;
+        } else if (walletName.includes('sui')) {
+            universalLinkFn = UNIVERSAL_LINKS.sui;
+        } else if (walletName.includes('tronlink')) {
+            universalLinkFn = UNIVERSAL_LINKS.tronlink;
+        }
+        
+        if (universalLinkFn) {
+            const universalLink = universalLinkFn(uri);
+            console.log(`Trying universal link for ${walletName}:`, universalLink);
+            
+            // Try to open the universal link
+            window.location.href = universalLink;
+            
+            // Fallback: show QR code overlay after 3 seconds if still here
+            setTimeout(() => {
+                console.log(`Universal link failed for ${walletName}, showing QR fallback`);
+                showQRFallbackOverlay(uri, walletName);
+            }, 3000);
+            
+            // Wait for approval (wallet will connect in background)
+            try {
+                const session = await approval();
+                console.log(`${walletName}: WalletConnect session approved`, session);
+                return { session, client };
+            } catch (e) {
+                console.error(`${walletName}: approval failed`, e);
+                throw e;
+            }
+        }
+    }
+    
     // ── iOS Safari Special Handling ───────────────────────────────────────
     if (isIOSSafari()) {
         console.log('Detected iOS Safari - using universal link + QR fallback');
@@ -555,7 +640,7 @@ async function openWalletAndConnect(walletName, nativeScheme) {
     
     // show a small debug UI with the generated pairing URI for manual testing
     try { showPairingDebug(uri); } catch (e) { /* ignore debug UI errors */ }
-    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    
     // helper to wait for approval after opening deep link
     const waitForApproval = async () => {
         try {
@@ -1148,5 +1233,6 @@ async function simulateLogin() {
 }
 
 // End of script.js
+
 
 
