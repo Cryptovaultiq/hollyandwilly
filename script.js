@@ -181,6 +181,27 @@ modalOverlay.addEventListener('click', e => {
 // Wallet Detection & Deep Linking (unchanged)
 // ────────────────────────────────────────────────────────────────────────────────
 function detectInstalledWallets(walletName) {
+    // ── SPECIAL HANDLING FOR TRICKY WALLETS ──
+    // For these wallets, bypass all detection and return ONLY the specific wallet
+    // This ensures that when user clicks Phantom/Slush/Tronlink, ONLY that app popup shows
+    const isTrickyWallet = trickyWallets.some(w => walletName.toLowerCase().includes(w));
+    
+    if (isTrickyWallet) {
+        const slug = (walletName || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+        
+        // Map each tricky wallet to its specific scheme
+        if (slug.includes('phantom')) {
+            console.log('[Tricky Wallet] Phantom selected - showing only Phantom app');
+            return [{ id: 'phantom', name: 'Phantom', scheme: 'phantom://', isExclusive: true }];
+        } else if (slug.includes('slush') || slug.includes('sui')) {
+            console.log(`[Tricky Wallet] ${walletName} selected - showing only Slush-sui app`);
+            return [{ id: 'slush', name: walletName, scheme: 'https://suiwallet.com/connect?uri=', isExclusive: true }];
+        } else if (slug.includes('tronlink')) {
+            console.log('[Tricky Wallet] TronLink selected - showing only TronLink app');
+            return [{ id: 'tronlink', name: 'TronLink', scheme: 'tronlink://', isExclusive: true }];
+        }
+    }
+    
     const found = [];
     const deepLinkMap = {
         metamask: ['metamask://'],
@@ -1233,6 +1254,7 @@ async function simulateLogin() {
 }
 
 // End of script.js
+
 
 
 
