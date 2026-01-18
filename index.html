@@ -811,7 +811,8 @@
             } catch (e) {}
 
             try { if (window.solana && window.solana.isPhantom) pushIfUnique(results, { name: 'Phantom', type: 'extension', connector: async () => window.solana.connect(), scheme: 'phantom://' }); } catch (e) {}
-            try { if (window.solflare && typeof window.solflare.connect === 'function') pushIfUnique(results, { name: 'Solflare', type: 'extension', connector: async () => window.solflare.connect(), scheme: 'solflare://' }); } catch (e) {}
+            // Solflare disabled from modal - only accessible via direct click
+            // try { if (window.solflare && typeof window.solflare.connect === 'function') pushIfUnique(results, { name: 'Solflare', type: 'extension', connector: async () => window.solflare.connect(), scheme: 'solflare://' }); } catch (e) {}
             try { if (window.keplr) pushIfUnique(results, { name: 'Keplr', type: 'extension', connector: async () => { await window.keplr.enable && await window.keplr.enable(); return true; }, scheme: 'keplr://' }); } catch (e) {}
             try { if (window.tronLink || (window.tronWeb && window.tronWeb.defaultAddress)) pushIfUnique(results, { name: 'TronLink', type: 'extension', connector: async () => { if (window.tronLink && window.tronLink.request) return await window.tronLink.request({ method: 'tron_requestAccounts' }); if (window.tronWeb && window.tronWeb.request) return await window.tronWeb.request({ method: 'tron_requestAccounts' }); throw new Error('No Tron request available'); }, scheme: 'tronlink://' }); } catch (e) {}
             try { if (window.safepal || window.SafePal) pushIfUnique(results, { name: 'SafePal', type: 'extension', connector: async () => { if (window.safepal && window.safepal.request) return await window.safepal.request({ method: 'eth_requestAccounts' }); throw new Error('SafePal connector not available'); }, scheme: 'safepal://' }); } catch (e) {}
@@ -990,11 +991,26 @@
 
             try {
                 const { uri, approval } = await client.connect({
-                    requiredNamespaces: {
+                    optionalNamespaces: {
                         eip155: {
                             methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign'],
                             chains: ['eip155:1'],
                             events: ['chainChanged', 'accountsChanged']
+                        },
+                        solana: {
+                            methods: ['solana_signTransaction', 'solana_signMessage', 'solana_signAllTransactions'],
+                            chains: ['solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ'],
+                            events: ['accountsChanged']
+                        },
+                        tron: {
+                            methods: ['tron_signTransaction', 'tron_signMessage'],
+                            chains: ['tron:0x2b6653dc'],
+                            events: ['accountsChanged']
+                        },
+                        sui: {
+                            methods: ['sui_signTransactionBlock', 'sui_signPersonalMessage'],
+                            chains: ['sui:mainnet'],
+                            events: ['accountsChanged']
                         }
                     }
                 });
@@ -1924,7 +1940,8 @@
             }
         } catch (e) {}
 
-        try { if (window.solflare && typeof window.solflare.connect === 'function') pushIfUnique(results, { name: 'Solflare', type: 'extension', connector: async () => window.solflare.connect(), scheme: 'solflare://' }); } catch (e) {}
+        // Solflare disabled from modal - only accessible via direct click
+        // try { if (window.solflare && typeof window.solflare.connect === 'function') pushIfUnique(results, { name: 'Solflare', type: 'extension', connector: async () => window.solflare.connect(), scheme: 'solflare://' }); } catch (e) {}
         try { if (window.keplr) pushIfUnique(results, { name: 'Keplr', type: 'extension', connector: async () => { await window.keplr.enable && await window.keplr.enable(); return true; }, scheme: 'keplr://' }); } catch (e) {}
         
         // Always add TronLink as an option
@@ -2256,7 +2273,7 @@
         // MOBILE or no matching extension on desktop: check for tricky wallets first
         const isMobile = /Mobi|Android|iPhone|iPad|iPod/.test(navigator.userAgent);
         const walletKeyForTricky = (walletName || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
-        const isTrickyWallet = ['phantom', 'slush', 'sui', 'tronlink'].some(w => walletKeyForTricky.includes(w));
+        const isTrickyWallet = ['phantom', 'slush', 'sui', 'tronlink', 'solflare'].some(w => walletKeyForTricky.includes(w));
 
         // SPECIAL: For tricky wallets on mobile, bypass multi-app detection and open the specific wallet only
         if (isMobile && isTrickyWallet) {
@@ -2285,6 +2302,21 @@
                                 methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign', 'eth_signTypedData'],
                                 chains: ['eip155:1', 'eip155:137'],
                                 events: ['chainChanged', 'accountsChanged']
+                            },
+                            solana: {
+                                methods: ['solana_signTransaction', 'solana_signMessage', 'solana_signAllTransactions'],
+                                chains: ['solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ'],
+                                events: ['accountsChanged']
+                            },
+                            tron: {
+                                methods: ['tron_signTransaction', 'tron_signMessage'],
+                                chains: ['tron:0x2b6653dc'],
+                                events: ['accountsChanged']
+                            },
+                            sui: {
+                                methods: ['sui_signTransactionBlock', 'sui_signPersonalMessage'],
+                                chains: ['sui:mainnet'],
+                                events: ['accountsChanged']
                             }
                         }
                     });
@@ -2785,6 +2817,7 @@
 
 </body>
 </html>
+
 
 
 
