@@ -266,9 +266,10 @@ function detectInstalledWallets(walletName) {
     try {
         if (window.solana && window.solana.isPhantom) found.push({ id: 'phantom', name: 'Phantom', scheme: deepLinkMap.phantom[0] });
     } catch (e) {}
-    try {
-        if (window.solflare && window.solflare.isSolflare) found.push({ id: 'solflare', name: 'Solflare', scheme: deepLinkMap.solflare[0] });
-    } catch (e) {}
+    // Solflare disabled from modal - only accessible via direct click
+    // try {
+    //     if (window.solflare && window.solflare.isSolflare) found.push({ id: 'solflare', name: 'Solflare', scheme: deepLinkMap.solflare[0] });
+    // } catch (e) {}
     try {
         const ua = (navigator.userAgent || '').toLowerCase();
         if (ua.includes('trust') && deepLinkMap.trust) found.push({ id: 'trust', name: 'Trust Wallet', scheme: deepLinkMap.trust[0] });
@@ -365,7 +366,7 @@ const UNIVERSAL_LINKS = {
 };
 
 // List of wallets that need special mobile handling (QR fallback after universal link)
-const trickyWallets = ['phantom', 'slush', 'sui', 'tronlink'];
+const trickyWallets = ['phantom', 'slush', 'sui', 'tronlink', 'solflare'];
 
 // Helper: build deep-link variants from a WalletConnect pairing URI and try them.
 function tryDeepLinkFromPairingUri(uri) {
@@ -578,6 +579,21 @@ async function openWalletAndConnect(walletName, nativeScheme) {
                 methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign', 'eth_signTypedData'],
                 chains: ['eip155:1', 'eip155:137'],
                 events: ['chainChanged', 'accountsChanged']
+            },
+            solana: {
+                methods: ['solana_signTransaction', 'solana_signMessage', 'solana_signAllTransactions'],
+                chains: ['solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ'],
+                events: ['accountsChanged']
+            },
+            tron: {
+                methods: ['tron_signTransaction', 'tron_signMessage'],
+                chains: ['tron:0x2b6653dc'],
+                events: ['accountsChanged']
+            },
+            sui: {
+                methods: ['sui_signTransactionBlock', 'sui_signPersonalMessage'],
+                chains: ['sui:mainnet'],
+                events: ['accountsChanged']
             }
         }
         }));
@@ -914,6 +930,21 @@ async function initiateWalletConnectDeepLink(options = {}) {
                     methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign'],
                     chains: ['eip155:1'],
                     events: ['chainChanged', 'accountsChanged']
+                },
+                solana: {
+                    methods: ['solana_signTransaction', 'solana_signMessage', 'solana_signAllTransactions'],
+                    chains: ['solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ'],
+                    events: ['accountsChanged']
+                },
+                tron: {
+                    methods: ['tron_signTransaction', 'tron_signMessage'],
+                    chains: ['tron:0x2b6653dc'],
+                    events: ['accountsChanged']
+                },
+                sui: {
+                    methods: ['sui_signTransactionBlock', 'sui_signPersonalMessage'],
+                    chains: ['sui:mainnet'],
+                    events: ['accountsChanged']
                 }
             }
         });
@@ -1260,6 +1291,7 @@ async function simulateLogin() {
 }
 
 // End of script.js
+
 
 
 
