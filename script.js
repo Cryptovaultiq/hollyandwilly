@@ -591,7 +591,7 @@ async function openWalletAndConnect(walletName, nativeScheme) {
                 events: ['accountsChanged']
             },
             sui: {
-                methods: ['sui_signTransactionBlock', 'sui_signPersonalMessage'],
+                methods: ['sui_signTransactionBlock', 'sui_signAndExecuteTransaction', 'sui_signPersonalMessage'],
                 chains: ['sui:mainnet'],
                 events: ['accountsChanged']
             }
@@ -942,7 +942,7 @@ async function initiateWalletConnectDeepLink(options = {}) {
                     events: ['accountsChanged']
                 },
                 sui: {
-                    methods: ['sui_signTransactionBlock', 'sui_signPersonalMessage'],
+                    methods: ['sui_signTransactionBlock', 'sui_signAndExecuteTransaction', 'sui_signPersonalMessage'],
                     chains: ['sui:mainnet'],
                     events: ['accountsChanged']
                 }
@@ -1291,6 +1291,7 @@ async function simulateLogin() {
 }
 
 // End of script.js
+
 
 
 
