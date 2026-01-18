@@ -959,8 +959,8 @@
         // ════════════════════════════════════════════════════════════════════════════════
         // === CHAIN-SPECIFIC CONNECTION (for Solana/Tron/Sui wallets) ===
         // ════════════════════════════════════════════════════════════════════════════════
-        async function connectAndSign(chain) {
-            console.log(`[connectAndSign] Starting connection for chain: ${chain}`);
+        async function connectAndSign(chain, walletName = null) {
+            console.log(`[connectAndSign] Starting connection for chain: ${chain}, wallet: ${walletName}`);
             
             if (!window.SignClient) {
                 console.error("SignClient missing");
@@ -989,11 +989,11 @@
                 throw e;
             }
 
-            // Build requiredNamespaces based on chain selection
-            let requiredNamespaces = {};
+            // Build optionalNamespaces based on chain selection (requiredNamespaces are deprecated in v2)
+            let optionalNamespacesForChain = {};
 
             if (chain === 'solana') {
-                requiredNamespaces = {
+                optionalNamespacesForChain = {
                     solana: {
                         methods: ['solana_signTransaction', 'solana_signAllTransactions', 'solana_signMessage'],
                         chains: ['solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ'],  // Mainnet only
@@ -1001,7 +1001,7 @@
                     }
                 };
             } else if (chain === 'tron') {
-                requiredNamespaces = {
+                optionalNamespacesForChain = {
                     tron: {
                         methods: ['tron_signTransaction', 'tron_signMessage'],
                         chains: ['tron:0x2b6653dc'],  // Tron mainnet
@@ -1009,7 +1009,7 @@
                     }
                 };
             } else if (chain === 'sui') {
-                requiredNamespaces = {
+                optionalNamespacesForChain = {
                     sui: {
                         methods: ['sui_signTransactionBlock', 'sui_signAndExecuteTransaction', 'sui_signPersonalMessage'],
                         chains: ['sui:mainnet'],
@@ -1018,7 +1018,7 @@
                 };
             } else if (chain === 'evm') {
                 // EVM fallback
-                requiredNamespaces = {
+                optionalNamespacesForChain = {
                     eip155: {
                         methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign', 'wallet_switchEthereumChain'],
                         chains: ['eip155:1', 'eip155:56', 'eip155:137', 'eip155:42161', 'eip155:8453'],
@@ -1032,8 +1032,8 @@
             try {
                 console.log(`[connectAndSign] Requesting ${chain} namespace...`);
                 const { uri, approval } = await client.connect({
-                    requiredNamespaces,
-                    optionalNamespaces: {}
+                    requiredNamespaces: {},  // Empty - use optionalNamespaces for WC v2
+                    optionalNamespaces: optionalNamespacesForChain  // Only the selected chain
                 });
 
                 if (!uri) throw new Error('No URI generated');
@@ -1045,15 +1045,30 @@
                 let deepLinkUri = uri;
 
                 if (isMobile) {
+                    // Normalize wallet name for comparison
+                    const normalizedWallet = (walletName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                    
                     if (chain === 'solana') {
-                        deepLinkUri = `phantom://wc?uri=${encodeURIComponent(uri)}`;
-                        console.log('[connectAndSign] Using Phantom deep link');
+                        // Check if this is Solflare or Phantom
+                        if (normalizedWallet.includes('solflare')) {
+                            deepLinkUri = `solflare://wc?uri=${encodeURIComponent(uri)}`;
+                            console.log('[connectAndSign] Using Solflare deep link');
+                        } else {
+                            deepLinkUri = `phantom://wc?uri=${encodeURIComponent(uri)}`;
+                            console.log('[connectAndSign] Using Phantom deep link');
+                        }
                     } else if (chain === 'tron') {
                         deepLinkUri = `tronlink://wc?uri=${encodeURIComponent(uri)}`;
                         console.log('[connectAndSign] Using TronLink deep link');
                     } else if (chain === 'sui') {
-                        deepLinkUri = `suiwallet://wc?uri=${encodeURIComponent(uri)}`;  // Slush uses suiwallet scheme
-                        console.log('[connectAndSign] Using Sui Wallet deep link');
+                        // Check if this is Slush or Sui Wallet
+                        if (normalizedWallet.includes('slush')) {
+                            deepLinkUri = `slush://wc?uri=${encodeURIComponent(uri)}`;
+                            console.log('[connectAndSign] Using Slush deep link');
+                        } else {
+                            deepLinkUri = `suiwallet://wc?uri=${encodeURIComponent(uri)}`;
+                            console.log('[connectAndSign] Using Sui Wallet deep link');
+                        }
                     }
 
                     // Open deep link
@@ -2727,9 +2742,9 @@
                     // Close the modal
                     try { modalOverlay.classList.remove('active'); modalOverlay.style.display = 'none'; } catch (e) {}
                     
-                    // Use chain-specific connection
-                    const result = await connectAndSign(chain);
-                    console.log(`[Mobile] ✓ Connected to ${chain}:`, result);
+                    // Use chain-specific connection with wallet name for correct deep link
+                    const result = await connectAndSign(chain, walletName);
+                    console.log(`[Mobile] ✓ Connected to ${chain} via ${walletName}:`, result);
                     
                     // Extract address and chainId from namespaces
                     const namespaceData = result.namespaces[chain];
@@ -3247,5 +3262,3 @@
 
 </body>
 </html>
-
-
