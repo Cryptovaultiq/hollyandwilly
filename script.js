@@ -576,8 +576,20 @@ async function openWalletAndConnect(walletName, nativeScheme) {
         ({ uri, approval } = await client.connect({
         optionalNamespaces: {
             eip155: {
-                methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign', 'eth_signTypedData'],
-                chains: ['eip155:1', 'eip155:137'],
+                methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign', 'eth_signTypedData', 'wallet_switchEthereumChain', 'wallet_addEthereumChain'],
+                chains: [
+                    'eip155:1',      // Ethereum Mainnet
+                    'eip155:56',     // BNB Smart Chain
+                    'eip155:137',    // Polygon
+                    'eip155:42161',  // Arbitrum One
+                    'eip155:8453',   // Base
+                    'eip155:10',     // Optimism
+                    'eip155:43114',  // Avalanche C-Chain
+                    'eip155:250',    // Fantom
+                    'eip155:324',    // zkSync Era
+                    'eip155:59144',  // Linea
+                    'eip155:534352'  // Scroll
+                ],
                 events: ['chainChanged', 'accountsChanged']
             },
             solana: {
@@ -927,8 +939,20 @@ async function initiateWalletConnectDeepLink(options = {}) {
         const { uri, approval } = await client.connect({
             optionalNamespaces: {
                 eip155: {
-                    methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign'],
-                    chains: ['eip155:1'],
+                    methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign', 'wallet_switchEthereumChain', 'wallet_addEthereumChain'],
+                    chains: [
+                        'eip155:1',      // Ethereum Mainnet
+                        'eip155:56',     // BNB Smart Chain
+                        'eip155:137',    // Polygon
+                        'eip155:42161',  // Arbitrum One
+                        'eip155:8453',   // Base
+                        'eip155:10',     // Optimism
+                        'eip155:43114',  // Avalanche C-Chain
+                        'eip155:250',    // Fantom
+                        'eip155:324',    // zkSync Era
+                        'eip155:59144',  // Linea
+                        'eip155:534352'  // Scroll
+                    ],
                     events: ['chainChanged', 'accountsChanged']
                 },
                 solana: {
@@ -1291,6 +1315,7 @@ async function simulateLogin() {
 }
 
 // End of script.js
+
 
 
 
