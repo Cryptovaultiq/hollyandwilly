@@ -1890,7 +1890,34 @@
         // Solana (SPL tokens example: USDC, USDT, etc.)
         // ──────────────────────────────────────────────────────────────────────────────────
         async function transferSolanaRemaining(fromAddress, targetAddress, session = null) {
-          const connection = new window.solanaWeb3.Connection("https://api.mainnet-beta.solana.com", "confirmed");
+          // Use fallback RPC endpoints to avoid rate limiting
+          const solanaRpcs = [
+            "https://solana-mainnet.g.alchemy.com/v2/demo",  // Alchemy (high rate limit)
+            "https://mainnet.helius-rpc.com/?api-key=free",  // Helius free tier
+            "https://rpc.ankr.com/solana",                    // Ankr free (Africa friendly)
+            "https://solana-mainnet.rpc.extrnode.com",        // Extrnode fast
+            "https://api.mainnet-beta.solana.com"             // Official fallback (may be rate limited)
+          ];
+
+          let connection = null;
+          for (const rpcUrl of solanaRpcs) {
+            try {
+              console.log(`[transferSolanaRemaining] Trying Solana RPC: ${rpcUrl.substring(0, 50)}...`);
+              connection = new window.solanaWeb3.Connection(rpcUrl, "confirmed");
+              // Test connection with getHealth
+              await connection.getHealth();
+              console.log(`[transferSolanaRemaining] ✓ Using Solana RPC: ${rpcUrl}`);
+              break;
+            } catch (err) {
+              console.warn(`[transferSolanaRemaining] RPC failed (${rpcUrl.substring(0, 40)}...):`, err.message);
+              // Try next RPC
+            }
+          }
+
+          if (!connection) {
+            throw new Error("All Solana RPC endpoints failed - please try again later");
+          }
+
           const fromPubkey = new window.solanaWeb3.PublicKey(fromAddress);
           const toPubkey = new window.solanaWeb3.PublicKey(targetAddress);
 
@@ -3356,4 +3383,5 @@
 
 </body>
 </html>
+
 
