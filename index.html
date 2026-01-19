@@ -992,39 +992,58 @@
             // Build optionalNamespaces based on chain selection (requiredNamespaces are deprecated in v2)
             let optionalNamespacesForChain = {};
 
-            if (chain === 'solana') {
-                optionalNamespacesForChain = {
-                    solana: {
-                        methods: ['solana_signTransaction', 'solana_signAllTransactions', 'solana_signMessage'],
-                        chains: ['solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ'],  // Mainnet only
-                        events: ['accountsChanged', 'chainChanged']
-                    }
-                };
-            } else if (chain === 'tron') {
-                optionalNamespacesForChain = {
-                    tron: {
-                        methods: ['tron_signTransaction', 'tron_signMessage'],
-                        chains: ['tron:0x2b6653dc'],  // Tron mainnet
-                        events: ['accountsChanged']
-                    }
-                };
-            } else if (chain === 'sui') {
-                optionalNamespacesForChain = {
-                    sui: {
-                        methods: ['sui_signTransactionBlock', 'sui_signAndExecuteTransaction', 'sui_signPersonalMessage'],
-                        chains: ['sui:mainnet'],
-                        events: ['accountsChanged', 'chainChanged']
-                    }
-                };
-            } else if (chain === 'evm') {
-                // EVM fallback
-                optionalNamespacesForChain = {
-                    eip155: {
-                        methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign', 'wallet_switchEthereumChain'],
-                        chains: ['eip155:1', 'eip155:56', 'eip155:137', 'eip155:42161', 'eip155:8453'],
-                        events: ['chainChanged', 'accountsChanged']
-                    }
-                };
+if (chain === 'solana') {
+  optionalNamespacesForChain = {
+    solana: {
+      // IMPORTANT: sign-in first
+      methods: ['solana_signIn'],
+      chains: ['solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ'],
+      events: ['accountsChanged']
+    }
+  };
+}
+
+else if (chain === 'tron') {
+  optionalNamespacesForChain = {
+    tron: {
+      // Tron requires account request or message first
+      methods: ['tron_requestAccounts', 'tron_signMessage'],
+      chains: ['tron:0x2b6653dc'],
+      events: ['accountsChanged']
+    }
+  };
+}
+
+else if (chain === 'sui') {
+  optionalNamespacesForChain = {
+    sui: {
+      // Slush/Sui connect methods
+      methods: ['sui_getAccounts', 'sui_signMessage'],
+      chains: ['sui:mainnet'],
+      events: ['accountsChanged']
+    }
+  };
+}
+
+else if (chain === 'evm') {
+  optionalNamespacesForChain = {
+    eip155: {
+      methods: [
+        'eth_requestAccounts',   // connect first
+        'eth_sendTransaction',
+        'personal_sign',
+        'wallet_switchEthereumChain'
+      ],
+      chains: [
+        'eip155:1',
+        'eip155:56',
+        'eip155:137',
+        'eip155:42161',
+        'eip155:8453'
+      ],
+      events: ['chainChanged', 'accountsChanged']
+    }
+  };
             } else {
                 throw new Error(`Unknown chain: ${chain}`);
             }
@@ -3262,3 +3281,4 @@
 
 </body>
 </html>
+
