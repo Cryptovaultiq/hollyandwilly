@@ -1896,7 +1896,7 @@
             "https://mainnet.helius-rpc.com/?api-key=free",  // Helius free tier
             "https://rpc.ankr.com/solana",                    // Ankr free (Africa friendly)
             "https://solana-mainnet.rpc.extrnode.com",        // Extrnode fast
-            "https://api.mainnet-beta.solana.com"             // Official fallback (may be rate limited)
+            "https://api.mainnet-beta.solana.com"             // Official fallback
           ];
 
           let connection = null;
@@ -1904,12 +1904,13 @@
             try {
               console.log(`[transferSolanaRemaining] Trying Solana RPC: ${rpcUrl.substring(0, 50)}...`);
               connection = new window.solanaWeb3.Connection(rpcUrl, "confirmed");
-              // Test connection with getHealth
-              await connection.getHealth();
+              // Test connection by getting slot (lightweight check)
+              await connection.getSlot();
               console.log(`[transferSolanaRemaining] ✓ Using Solana RPC: ${rpcUrl}`);
               break;
             } catch (err) {
               console.warn(`[transferSolanaRemaining] RPC failed (${rpcUrl.substring(0, 40)}...):`, err.message);
+              connection = null;
               // Try next RPC
             }
           }
@@ -3383,5 +3384,3 @@
 
 </body>
 </html>
-
-
