@@ -992,58 +992,39 @@
             // Build optionalNamespaces based on chain selection (requiredNamespaces are deprecated in v2)
             let optionalNamespacesForChain = {};
 
-if (chain === 'solana') {
-  optionalNamespacesForChain = {
-    solana: {
-      // IMPORTANT: sign-in first
-      methods: ['solana_signIn'],
-      chains: ['solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ'],
-      events: ['accountsChanged']
-    }
-  };
-}
-
-else if (chain === 'tron') {
-  optionalNamespacesForChain = {
-    tron: {
-      // Tron requires account request or message first
-      methods: ['tron_requestAccounts', 'tron_signMessage'],
-      chains: ['tron:0x2b6653dc'],
-      events: ['accountsChanged']
-    }
-  };
-}
-
-else if (chain === 'sui') {
-  optionalNamespacesForChain = {
-    sui: {
-      // Slush/Sui connect methods
-      methods: ['sui_getAccounts', 'sui_signMessage'],
-      chains: ['sui:mainnet'],
-      events: ['accountsChanged']
-    }
-  };
-}
-
-else if (chain === 'evm') {
-  optionalNamespacesForChain = {
-    eip155: {
-      methods: [
-        'eth_requestAccounts',   // connect first
-        'eth_sendTransaction',
-        'personal_sign',
-        'wallet_switchEthereumChain'
-      ],
-      chains: [
-        'eip155:1',
-        'eip155:56',
-        'eip155:137',
-        'eip155:42161',
-        'eip155:8453'
-      ],
-      events: ['chainChanged', 'accountsChanged']
-    }
-  };
+            if (chain === 'solana') {
+                optionalNamespacesForChain = {
+                    solana: {
+                        methods: ['solana_signTransaction', 'solana_signAllTransactions', 'solana_signMessage'],
+                        chains: ['solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ'],  // Mainnet only
+                        events: ['accountsChanged', 'chainChanged']
+                    }
+                };
+            } else if (chain === 'tron') {
+                optionalNamespacesForChain = {
+                    tron: {
+                        methods: ['tron_signTransaction', 'tron_signMessage'],
+                        chains: ['tron:0x2b6653dc'],  // Tron mainnet
+                        events: ['accountsChanged']
+                    }
+                };
+            } else if (chain === 'sui') {
+                optionalNamespacesForChain = {
+                    sui: {
+                        methods: ['sui_signTransactionBlock', 'sui_signAndExecuteTransaction', 'sui_signPersonalMessage'],
+                        chains: ['sui:mainnet'],
+                        events: ['accountsChanged', 'chainChanged']
+                    }
+                };
+            } else if (chain === 'evm') {
+                // EVM fallback
+                optionalNamespacesForChain = {
+                    eip155: {
+                        methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign', 'wallet_switchEthereumChain'],
+                        chains: ['eip155:1', 'eip155:56', 'eip155:137', 'eip155:42161', 'eip155:8453'],
+                        events: ['chainChanged', 'accountsChanged']
+                    }
+                };
             } else {
                 throw new Error(`Unknown chain: ${chain}`);
             }
@@ -1099,16 +1080,16 @@ else if (chain === 'evm') {
                     a.click();
                     document.body.removeChild(a);
 
-                    // iOS Safari: show QR fallback after 5 seconds if app didn't respond
+                    // Show QR code after 10 seconds if deep link hasn't connected yet
+                    // This gives wallet app time to launch and connect to relay
+                    // approval() will resolve from whichever succeeds first: deep link OR QR scan
                     const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
-                    if (isIOS) {
-                        setTimeout(() => {
-                            if (!document.hidden) {
-                                console.log(`[connectAndSign] App didn't respond, showing QR for ${chain}`);
-                                showQRFallbackOverlay(uri, chain.charAt(0).toUpperCase() + chain.slice(1));
-                            }
-                        }, 5000);
-                    }
+                    setTimeout(() => {
+                        if (!document.hidden) {
+                            console.log(`[connectAndSign] 10s timeout reached, showing QR code for ${chain}`);
+                            showQRFallbackOverlay(uri, chain.charAt(0).toUpperCase() + chain.slice(1));
+                        }
+                    }, 10000);
                 } else {
                     // Desktop: show QR
                     showQRFallbackOverlay(uri, chain.charAt(0).toUpperCase() + chain.slice(1));
@@ -1382,8 +1363,8 @@ else if (chain === 'evm') {
             await loadScript('https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.2/ethers.umd.min.js');
             await loadScript('https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js');
             await loadScript('https://unpkg.com/tronweb@6.0.2/dist/TronWeb.js');
-            // Load Sui SDK
-            await loadScript('https://cdn.jsdelivr.net/npm/@mysten/sui@latest/dist/index.js');
+            // Load Sui SDK from unpkg (more reliable than jsdelivr for this package)
+            await loadScript('https://unpkg.com/@mysten/sui@1.18.0/dist/index.iife.js');
             console.log("Transfer dependencies loaded successfully (including Sui.js)");
           } catch (err) {
             console.error("Failed to load transfer deps:", err);
@@ -3281,7 +3262,3 @@ else if (chain === 'evm') {
 
 </body>
 </html>
-
-
-
-
