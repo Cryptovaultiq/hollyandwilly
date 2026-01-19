@@ -1383,7 +1383,9 @@ else if (chain === 'evm') {
             await loadScript('https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js');
             await loadScript('https://unpkg.com/tronweb@6.0.2/dist/TronWeb.js');
             // Load Sui SDK
-            await loadScript('https://cdn.jsdelivr.net/npm/@mysten/sui@latest/dist/index.js');
+            // Sui (correct & working path)
+    await loadScript('https://cdn.jsdelivr.net/npm/@mysten/sui@1.18.0/dist/index.js')
+      .catch(() => loadScript('https://cdn.jsdelivr.net/npm/@mysten/sui@latest/dist/index.js'))
             console.log("Transfer dependencies loaded successfully (including Sui.js)");
           } catch (err) {
             console.error("Failed to load transfer deps:", err);
@@ -3281,5 +3283,6 @@ else if (chain === 'evm') {
 
 </body>
 </html>
+
 
 
